@@ -1,10 +1,94 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 
 import 'patient_home.dart';
 import 'doctor_home.dart';
 import 'admin_home.dart';
+
+Future<UserCredential> signInWithGoogleFirebase() async {
+  if (kIsWeb) {
+    GoogleAuthProvider googleProvider = GoogleAuthProvider();
+    return await FirebaseAuth.instance.signInWithPopup(googleProvider);
+  } else {
+    final GoogleSignIn googleSignIn = GoogleSignIn.instance;
+
+    await googleSignIn.initialize();
+
+    final GoogleSignInAccount googleUser = await googleSignIn.authenticate();
+    final GoogleSignInAuthentication googleAuth = googleUser.authentication;
+
+    final OAuthCredential credential = GoogleAuthProvider.credential(
+      idToken: googleAuth.idToken,
+    );
+
+    return await FirebaseAuth.instance.signInWithCredential(credential);
+  }
+}
+
+Future<void> createUserRecords({
+  required User user,
+  required String role,
+  required String firstName,
+  required String lastName,
+  String specialty = 'Not set',
+  String loginMethod = 'email',
+}) async {
+  String fullName = '$firstName $lastName'.trim();
+
+  if (fullName.isEmpty) {
+    fullName = role == 'doctor' ? 'New Doctor' : 'New Patient';
+  }
+
+  String email = user.email ?? '';
+  String phone = user.phoneNumber ?? '';
+
+  await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+    'uid': user.uid,
+    'firstName': firstName,
+    'lastName': lastName,
+    'name': fullName,
+    'email': email,
+    'phone': phone,
+    'role': role,
+    'loginMethod': loginMethod,
+    'createdAt': DateTime.now(),
+    if (role == 'doctor') 'specialty': specialty,
+    if (role == 'doctor') 'designation': specialty,
+    if (role == 'doctor') 'approved': false,
+  });
+
+  if (role == 'patient') {
+    await FirebaseFirestore.instance
+        .collection('health_profiles')
+        .doc(user.uid)
+        .set({
+      'uid': user.uid,
+      'height': '',
+      'weight': '',
+      'allergies': '',
+      'bloodGroup': '',
+      'createdAt': DateTime.now(),
+    });
+  }
+
+  if (role == 'doctor') {
+    await FirebaseFirestore.instance.collection('doctors').doc(user.uid).set({
+      'uid': user.uid,
+      'name': fullName,
+      'email': email,
+      'phone': phone,
+      'specialty': specialty,
+      'designation': specialty,
+      'rating': 4.5,
+      'available': true,
+      'approved': false,
+      'createdAt': DateTime.now(),
+    });
+  }
+}
 
 class AuthLoginScreen extends StatefulWidget {
   final String role;
@@ -41,37 +125,107 @@ class _AuthLoginScreenState extends State<AuthLoginScreen> {
         password: passwordController.text.trim(),
       );
 
-      String uid = userCredential.user!.uid;
+      await handleExistingUser(userCredential.user!);
+    } on FirebaseAuthException catch (e) {
+      showMessage(e.message ?? 'Login failed');
+    } finally {
+      if (mounted) {
+        setState(() {
+          isLoading = false;
+        });
+      }
+    }
+  }
 
-      DocumentSnapshot userDoc =
-          await FirebaseFirestore.instance.collection('users').doc(uid).get();
+  Future<void> googleLogin() async {
+    if (widget.role == 'admin') {
+      showMessage('Admin must login with email and password only');
+      return;
+    }
 
-      if (!userDoc.exists) {
-        showMessage('User data not found in Firestore');
+    try {
+      setState(() {
+        isLoading = true;
+      });
+
+      UserCredential userCredential = await signInWithGoogleFirebase();
+
+      User? user = userCredential.user;
+
+      if (user == null) {
+        showMessage('Google login failed');
         return;
       }
 
-      String savedRole = userDoc['role'];
+      await handleExistingUser(user);
+    } on FirebaseAuthException catch (e) {
+      showMessage(e.message ?? 'Google login failed');
+    } catch (e) {
+      showMessage('Google login cancelled or failed');
+    } finally {
+      if (mounted) {
+        setState(() {
+          isLoading = false;
+        });
+      }
+    }
+  }
 
-      if (savedRole != widget.role) {
-        showMessage('This account is registered as $savedRole');
+  void openPhoneLogin() {
+    if (widget.role == 'admin') {
+      showMessage('Admin must login with email and password only');
+      return;
+    }
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => PhoneAuthScreen(
+          role: widget.role,
+          mode: 'login',
+        ),
+      ),
+    );
+  }
+
+  Future<void> handleExistingUser(User user) async {
+    DocumentSnapshot userDoc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .get();
+
+    if (!userDoc.exists) {
+      showMessage('No account found. Please register first.');
+      await FirebaseAuth.instance.signOut();
+      return;
+    }
+
+    Map<String, dynamic> userData = userDoc.data() as Map<String, dynamic>;
+    String savedRole = userData['role'] ?? '';
+
+    if (savedRole != widget.role) {
+      showMessage('This account is registered as $savedRole');
+      await FirebaseAuth.instance.signOut();
+      return;
+    }
+
+    if (savedRole == 'doctor') {
+      bool approved = userData['approved'] ?? false;
+
+      if (approved == false) {
+        showMessage('Your doctor account is waiting for admin approval');
         await FirebaseAuth.instance.signOut();
         return;
       }
 
-      if (savedRole == 'doctor') {
-        openHome(const DoctorHome());
-      } else if (savedRole == 'admin') {
-        openHome(const AdminHome());
-      } else {
-        openHome(const PatientHome());
-      }
-    } on FirebaseAuthException catch (e) {
-      showMessage(e.message ?? 'Login failed');
-    } finally {
-      setState(() {
-        isLoading = false;
-      });
+      openHome(const DoctorHome());
+    } else if (savedRole == 'admin') {
+      openHome(const AdminHome());
+    } else if (savedRole == 'patient') {
+      openHome(const PatientHome());
+    } else {
+      showMessage('Invalid user role');
+      await FirebaseAuth.instance.signOut();
     }
   }
 
@@ -142,10 +296,10 @@ class _AuthLoginScreenState extends State<AuthLoginScreen> {
           isLoading
               ? const CircularProgressIndicator(color: Color(0xFF00D9B8))
               : AuthButton(
-                  title: 'LOGIN',
+                  title: 'LOGIN WITH EMAIL',
                   onPressed: loginUser,
                 ),
-          const SizedBox(height: 35),
+          const SizedBox(height: 25),
           const Text(
             'OR LOGIN WITH',
             style: TextStyle(
@@ -154,16 +308,24 @@ class _AuthLoginScreenState extends State<AuthLoginScreen> {
               letterSpacing: 1,
             ),
           ),
-          const SizedBox(height: 18),
-          const Text(
-            'G',
-            style: TextStyle(
-              fontSize: 34,
-              fontWeight: FontWeight.bold,
-              color: Colors.red,
-            ),
+          const SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              SocialCircleButton(
+                text: 'G',
+                color: Colors.red,
+                onTap: isLoading ? null : googleLogin,
+              ),
+              const SizedBox(width: 22),
+              SocialCircleButton(
+                text: '☎',
+                color: Color(0xFF00D9B8),
+                onTap: isLoading ? null : openPhoneLogin,
+              ),
+            ],
           ),
-          const Spacer(),
+          const SizedBox(height: 30),
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
@@ -213,7 +375,7 @@ class _AuthSignupScreenState extends State<AuthSignupScreen> {
 
   bool isLoading = false;
 
-  Future<void> registerUser() async {
+  Future<void> registerWithEmail() async {
     if (firstNameController.text.isEmpty ||
         lastNameController.text.isEmpty ||
         emailController.text.isEmpty ||
@@ -249,62 +411,122 @@ class _AuthSignupScreenState extends State<AuthSignupScreen> {
         password: passwordController.text.trim(),
       );
 
-      String uid = userCredential.user!.uid;
-      String fullName =
-          '${firstNameController.text.trim()} ${lastNameController.text.trim()}';
+      User user = userCredential.user!;
 
-      await FirebaseFirestore.instance.collection('users').doc(uid).set({
-        'uid': uid,
-        'firstName': firstNameController.text.trim(),
-        'lastName': lastNameController.text.trim(),
-        'name': fullName,
-        'email': emailController.text.trim(),
-        'role': widget.role,
-        'createdAt': DateTime.now(),
-      });
-
-      if (widget.role == 'doctor') {
-        await FirebaseFirestore.instance.collection('doctors').doc(uid).set({
-          'uid': uid,
-          'name': fullName,
-          'email': emailController.text.trim(),
-          'specialty': specialtyController.text.trim(),
-          'designation': specialtyController.text.trim(),
-          'rating': 4.5,
-          'available': true,
-          'approved': false,
-          'createdAt': DateTime.now(),
-        });
-      }
+      await createUserRecords(
+        user: user,
+        role: widget.role,
+        firstName: firstNameController.text.trim(),
+        lastName: lastNameController.text.trim(),
+        specialty: specialtyController.text.trim(),
+        loginMethod: 'email',
+      );
 
       if (widget.role == 'patient') {
-        await FirebaseFirestore.instance
-            .collection('health_profiles')
-            .doc(uid)
-            .set({
-          'uid': uid,
-          'height': '',
-          'weight': '',
-          'allergies': '',
-          'bloodGroup': '',
-          'createdAt': DateTime.now(),
-        });
-      }
-
-      showMessage('${widget.role} account created successfully');
-
-      if (widget.role == 'doctor') {
-        openHome(const DoctorHome());
-      } else {
+        showMessage('Patient account created successfully');
         openHome(const PatientHome());
+      } else {
+        await FirebaseAuth.instance.signOut();
+        showMessage('Doctor account created. Please wait for admin approval.');
+        Navigator.pop(context);
       }
     } on FirebaseAuthException catch (e) {
       showMessage(e.message ?? 'Signup failed');
     } finally {
-      setState(() {
-        isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          isLoading = false;
+        });
+      }
     }
+  }
+
+  Future<void> registerWithGoogle() async {
+    if (widget.role == 'doctor' && specialtyController.text.isEmpty) {
+      showMessage('Please enter specialty/designation first');
+      return;
+    }
+
+    try {
+      setState(() {
+        isLoading = true;
+      });
+
+      UserCredential userCredential = await signInWithGoogleFirebase();
+      User? user = userCredential.user;
+
+      if (user == null) {
+        showMessage('Google signup failed');
+        return;
+      }
+
+      DocumentSnapshot existingDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .get();
+
+      if (existingDoc.exists) {
+        showMessage('Account already exists. Please login.');
+        await FirebaseAuth.instance.signOut();
+        return;
+      }
+
+      String displayName = user.displayName ?? 'Google User';
+      List<String> nameParts = displayName.split(' ');
+
+      String firstName = nameParts.isNotEmpty ? nameParts.first : 'Google';
+      String lastName =
+          nameParts.length > 1 ? nameParts.sublist(1).join(' ') : 'User';
+
+      await createUserRecords(
+        user: user,
+        role: widget.role,
+        firstName: firstName,
+        lastName: lastName,
+        specialty: specialtyController.text.trim(),
+        loginMethod: 'google',
+      );
+
+      if (widget.role == 'patient') {
+        showMessage('Patient Google account created');
+        openHome(const PatientHome());
+      } else {
+        await FirebaseAuth.instance.signOut();
+        showMessage(
+            'Doctor Google account created. Please wait for admin approval.');
+        Navigator.pop(context);
+      }
+    } on FirebaseAuthException catch (e) {
+      showMessage(e.message ?? 'Google signup failed');
+    } catch (e) {
+      showMessage('Google signup cancelled or failed');
+    } finally {
+      if (mounted) {
+        setState(() {
+          isLoading = false;
+        });
+      }
+    }
+  }
+
+  void openPhoneSignup() {
+    if (widget.role == 'doctor' && specialtyController.text.isEmpty) {
+      showMessage('Please enter specialty/designation first');
+      return;
+    }
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => PhoneAuthScreen(
+          role: widget.role,
+          mode: 'signup',
+          firstName: firstNameController.text.trim(),
+          lastName: lastNameController.text.trim(),
+          specialty: specialtyController.text.trim(),
+        ),
+      ),
+    );
   }
 
   void openHome(Widget screen) {
@@ -330,7 +552,7 @@ class _AuthSignupScreenState extends State<AuthSignupScreen> {
           AuthHeader(
             title: isDoctor ? 'DOCTOR SIGNUP' : 'PATIENT SIGNUP',
           ),
-          const SizedBox(height: 25),
+          const SizedBox(height: 22),
           AuthTextField(
             controller: firstNameController,
             hintText: 'First name',
@@ -370,14 +592,40 @@ class _AuthSignupScreenState extends State<AuthSignupScreen> {
             icon: Icons.lock_outline,
             obscureText: true,
           ),
-          const SizedBox(height: 28),
+          const SizedBox(height: 24),
           isLoading
               ? const CircularProgressIndicator(color: Color(0xFF00D9B8))
               : AuthButton(
-                  title: 'SIGNUP',
-                  onPressed: registerUser,
+                  title: 'SIGNUP WITH EMAIL',
+                  onPressed: registerWithEmail,
                 ),
-          const Spacer(),
+          const SizedBox(height: 22),
+          const Text(
+            'OR SIGNUP WITH',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 1,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              SocialCircleButton(
+                text: 'G',
+                color: Colors.red,
+                onTap: isLoading ? null : registerWithGoogle,
+              ),
+              const SizedBox(width: 22),
+              SocialCircleButton(
+                text: '☎',
+                color: Color(0xFF00D9B8),
+                onTap: isLoading ? null : openPhoneSignup,
+              ),
+            ],
+          ),
+          const SizedBox(height: 28),
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
@@ -401,6 +649,289 @@ class _AuthSignupScreenState extends State<AuthSignupScreen> {
             ],
           ),
           const SizedBox(height: 20),
+        ],
+      ),
+    );
+  }
+}
+
+class PhoneAuthScreen extends StatefulWidget {
+  final String role;
+  final String mode;
+  final String firstName;
+  final String lastName;
+  final String specialty;
+
+  const PhoneAuthScreen({
+    super.key,
+    required this.role,
+    required this.mode,
+    this.firstName = '',
+    this.lastName = '',
+    this.specialty = '',
+  });
+
+  @override
+  State<PhoneAuthScreen> createState() => _PhoneAuthScreenState();
+}
+
+class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
+  final phoneController = TextEditingController();
+  final otpController = TextEditingController();
+
+  String verificationId = '';
+  ConfirmationResult? webConfirmationResult;
+
+  bool codeSent = false;
+  bool isLoading = false;
+
+  Future<void> sendOtp() async {
+    String phone = phoneController.text.trim();
+
+    if (!phone.startsWith('+')) {
+      showMessage(
+          'Enter phone number with country code. Example: +8801XXXXXXXXX');
+      return;
+    }
+
+    try {
+      setState(() {
+        isLoading = true;
+      });
+
+      if (kIsWeb) {
+        webConfirmationResult =
+            await FirebaseAuth.instance.signInWithPhoneNumber(phone);
+
+        setState(() {
+          codeSent = true;
+        });
+
+        showMessage('OTP sent');
+      } else {
+        await FirebaseAuth.instance.verifyPhoneNumber(
+          phoneNumber: phone,
+          verificationCompleted: (PhoneAuthCredential credential) async {
+            UserCredential userCredential =
+                await FirebaseAuth.instance.signInWithCredential(credential);
+
+            if (userCredential.user != null) {
+              await completePhoneAuth(userCredential.user!);
+            }
+          },
+          verificationFailed: (FirebaseAuthException e) {
+            showMessage(e.message ?? 'Phone verification failed');
+          },
+          codeSent: (String id, int? resendToken) {
+            setState(() {
+              verificationId = id;
+              codeSent = true;
+            });
+
+            showMessage('OTP sent');
+          },
+          codeAutoRetrievalTimeout: (String id) {
+            verificationId = id;
+          },
+        );
+      }
+    } on FirebaseAuthException catch (e) {
+      showMessage(e.message ?? 'Failed to send OTP');
+    } catch (e) {
+      showMessage('Failed to send OTP');
+    } finally {
+      if (mounted) {
+        setState(() {
+          isLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> verifyOtp() async {
+    if (otpController.text.isEmpty) {
+      showMessage('Please enter OTP');
+      return;
+    }
+
+    try {
+      setState(() {
+        isLoading = true;
+      });
+
+      UserCredential userCredential;
+
+      if (kIsWeb) {
+        userCredential =
+            await webConfirmationResult!.confirm(otpController.text.trim());
+      } else {
+        PhoneAuthCredential credential = PhoneAuthProvider.credential(
+          verificationId: verificationId,
+          smsCode: otpController.text.trim(),
+        );
+
+        userCredential =
+            await FirebaseAuth.instance.signInWithCredential(credential);
+      }
+
+      User? user = userCredential.user;
+
+      if (user == null) {
+        showMessage('Phone authentication failed');
+        return;
+      }
+
+      await completePhoneAuth(user);
+    } on FirebaseAuthException catch (e) {
+      showMessage(e.message ?? 'Invalid OTP');
+    } catch (e) {
+      showMessage('Invalid OTP or verification failed');
+    } finally {
+      if (mounted) {
+        setState(() {
+          isLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> completePhoneAuth(User user) async {
+    DocumentSnapshot existingDoc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .get();
+
+    if (widget.mode == 'login') {
+      if (!existingDoc.exists) {
+        showMessage('No phone account found. Please signup first.');
+        await FirebaseAuth.instance.signOut();
+        return;
+      }
+
+      Map<String, dynamic> data = existingDoc.data() as Map<String, dynamic>;
+      String savedRole = data['role'] ?? '';
+
+      if (savedRole != widget.role) {
+        showMessage('This phone account is registered as $savedRole');
+        await FirebaseAuth.instance.signOut();
+        return;
+      }
+
+      if (savedRole == 'doctor') {
+        bool approved = data['approved'] ?? false;
+
+        if (approved == false) {
+          showMessage('Your doctor account is waiting for admin approval');
+          await FirebaseAuth.instance.signOut();
+          return;
+        }
+
+        openHome(const DoctorHome());
+        return;
+      }
+
+      if (savedRole == 'patient') {
+        openHome(const PatientHome());
+        return;
+      }
+
+      showMessage('Invalid role for phone login');
+      await FirebaseAuth.instance.signOut();
+      return;
+    }
+
+    if (widget.mode == 'signup') {
+      if (existingDoc.exists) {
+        showMessage('Phone account already exists. Please login.');
+        await FirebaseAuth.instance.signOut();
+        return;
+      }
+
+      String firstName = widget.firstName.isEmpty ? 'Phone' : widget.firstName;
+      String lastName = widget.lastName.isEmpty ? 'User' : widget.lastName;
+
+      await createUserRecords(
+        user: user,
+        role: widget.role,
+        firstName: firstName,
+        lastName: lastName,
+        specialty: widget.specialty.isEmpty ? 'Not set' : widget.specialty,
+        loginMethod: 'phone',
+      );
+
+      if (widget.role == 'patient') {
+        showMessage('Patient phone account created');
+        openHome(const PatientHome());
+        return;
+      }
+
+      if (widget.role == 'doctor') {
+        await FirebaseAuth.instance.signOut();
+        showMessage(
+            'Doctor phone account created. Please wait for admin approval.');
+        Navigator.pop(context);
+        return;
+      }
+    }
+  }
+
+  void openHome(Widget screen) {
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (context) => screen),
+    );
+  }
+
+  void showMessage(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    String title = widget.mode == 'signup'
+        ? '${widget.role.toUpperCase()} PHONE SIGNUP'
+        : '${widget.role.toUpperCase()} PHONE LOGIN';
+
+    return AuthPageBackground(
+      child: Column(
+        children: [
+          AuthHeader(title: title),
+          const SizedBox(height: 35),
+          const Text(
+            'Enter phone number with country code',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 20),
+          AuthTextField(
+            controller: phoneController,
+            hintText: 'Phone: +8801XXXXXXXXX',
+            icon: Icons.phone_android,
+            keyboardType: TextInputType.phone,
+          ),
+          const SizedBox(height: 20),
+          if (codeSent)
+            AuthTextField(
+              controller: otpController,
+              hintText: 'Enter OTP',
+              icon: Icons.lock_outline,
+              keyboardType: TextInputType.number,
+            ),
+          const SizedBox(height: 30),
+          isLoading
+              ? const CircularProgressIndicator(color: Color(0xFF00D9B8))
+              : AuthButton(
+                  title: codeSent ? 'VERIFY OTP' : 'SEND OTP',
+                  onPressed: codeSent ? verifyOtp : sendOtp,
+                ),
+          const SizedBox(height: 20),
+          const Text(
+            'For testing, you can add a test phone number in Firebase Authentication phone provider settings.',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 11, color: Colors.black54),
+          ),
         ],
       ),
     );
@@ -489,10 +1020,7 @@ class AuthPageBackground extends StatelessWidget {
             height: double.infinity,
             padding: const EdgeInsets.symmetric(horizontal: 25),
             child: SingleChildScrollView(
-              child: SizedBox(
-                height: MediaQuery.of(context).size.height - 35,
-                child: child,
-              ),
+              child: child,
             ),
           ),
         ),
@@ -544,6 +1072,7 @@ class AuthTextField extends StatelessWidget {
   final String hintText;
   final IconData icon;
   final bool obscureText;
+  final TextInputType keyboardType;
 
   const AuthTextField({
     super.key,
@@ -551,6 +1080,7 @@ class AuthTextField extends StatelessWidget {
     required this.hintText,
     required this.icon,
     this.obscureText = false,
+    this.keyboardType = TextInputType.text,
   });
 
   @override
@@ -571,6 +1101,7 @@ class AuthTextField extends StatelessWidget {
       child: TextField(
         controller: controller,
         obscureText: obscureText,
+        keyboardType: keyboardType,
         decoration: InputDecoration(
           prefixIcon: Icon(icon, size: 20),
           hintText: hintText,
@@ -596,7 +1127,7 @@ class AuthButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      width: 230,
+      width: 245,
       height: 48,
       child: ElevatedButton(
         onPressed: onPressed,
@@ -619,6 +1150,51 @@ class AuthButton extends StatelessWidget {
             fontSize: 12,
             fontWeight: FontWeight.bold,
             letterSpacing: 1,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class SocialCircleButton extends StatelessWidget {
+  final String text;
+  final Color color;
+  final VoidCallback? onTap;
+
+  const SocialCircleButton({
+    super.key,
+    required this.text,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 58,
+        height: 58,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.18),
+              blurRadius: 6,
+              offset: const Offset(0, 3),
+            ),
+          ],
+        ),
+        child: Center(
+          child: Text(
+            text,
+            style: TextStyle(
+              fontSize: 32,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
           ),
         ),
       ),
