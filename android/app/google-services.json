@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "520486284450",
+    "project_id": "docmate-2026",
+    "storage_bucket": "docmate-2026.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:520486284450:android:b7014be57e6ca308867bfb",
+        "android_client_info": {
+          "package_name": "com.example.docmate"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC_jKQm4H5X0A_KnbwyYeUW6rFFk_2-1QY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
