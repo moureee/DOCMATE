@@ -277,46 +277,46 @@ class _PatientHomeState extends State<PatientHome> {
 
   Widget buildFeatureGrid() {
     final features = [
-      HomeFeature(
+      const HomeFeature(
         title: 'Symptom Checker',
         icon: Icons.psychology,
-        screen: const AiSymptomCheckerScreen(),
+        screen: AiSymptomCheckerScreen(),
       ),
-      HomeFeature(
+      const HomeFeature(
         title: 'Queue Prediction',
         icon: Icons.hourglass_bottom,
-        screen: const QueuePredictionScreen(),
+        screen: QueuePredictionScreen(),
       ),
-      HomeFeature(
+      const HomeFeature(
         title: 'Emergency',
         icon: Icons.emergency,
-        screen: const EmergencyScreen(),
+        screen: EmergencyScreen(),
         danger: true,
       ),
-      HomeFeature(
+      const HomeFeature(
         title: 'Medicines',
         icon: Icons.medication,
-        screen: const MedicineScreen(),
+        screen: MedicineScreen(),
       ),
-      HomeFeature(
+      const HomeFeature(
         title: 'Health Profile',
         icon: Icons.monitor_heart_outlined,
-        screen: const HealthProfileScreen(),
+        screen: HealthProfileScreen(),
       ),
-      HomeFeature(
+      const HomeFeature(
         title: 'Health Card',
         icon: Icons.badge_outlined,
-        screen: const HealthCardScreen(),
+        screen: HealthCardScreen(),
       ),
-      HomeFeature(
+      const HomeFeature(
         title: 'Prescriptions',
         icon: Icons.receipt_long,
-        screen: const PrescriptionScreen(),
+        screen: PrescriptionScreen(),
       ),
-      HomeFeature(
+      const HomeFeature(
         title: 'Timeline',
         icon: Icons.timeline,
-        screen: const TimelineScreen(),
+        screen: TimelineScreen(),
       ),
     ];
 

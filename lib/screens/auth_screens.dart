@@ -320,7 +320,7 @@ class _AuthLoginScreenState extends State<AuthLoginScreen> {
               const SizedBox(width: 22),
               SocialCircleButton(
                 text: '☎',
-                color: Color(0xFF00D9B8),
+                color: const Color(0xFF00D9B8),
                 onTap: isLoading ? null : openPhoneLogin,
               ),
             ],
@@ -427,6 +427,9 @@ class _AuthSignupScreenState extends State<AuthSignupScreen> {
         openHome(const PatientHome());
       } else {
         await FirebaseAuth.instance.signOut();
+
+        if (!mounted) return;
+
         showMessage('Doctor account created. Please wait for admin approval.');
         Navigator.pop(context);
       }
@@ -492,8 +495,12 @@ class _AuthSignupScreenState extends State<AuthSignupScreen> {
         openHome(const PatientHome());
       } else {
         await FirebaseAuth.instance.signOut();
+
+        if (!mounted) return;
+
         showMessage(
-            'Doctor Google account created. Please wait for admin approval.');
+          'Doctor Google account created. Please wait for admin approval.',
+        );
         Navigator.pop(context);
       }
     } on FirebaseAuthException catch (e) {
@@ -620,7 +627,7 @@ class _AuthSignupScreenState extends State<AuthSignupScreen> {
               const SizedBox(width: 22),
               SocialCircleButton(
                 text: '☎',
-                color: Color(0xFF00D9B8),
+                color: const Color(0xFF00D9B8),
                 onTap: isLoading ? null : openPhoneSignup,
               ),
             ],
@@ -867,8 +874,12 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
 
       if (widget.role == 'doctor') {
         await FirebaseAuth.instance.signOut();
+
+        if (!mounted) return;
+
         showMessage(
-            'Doctor phone account created. Please wait for admin approval.');
+          'Doctor phone account created. Please wait for admin approval.',
+        );
         Navigator.pop(context);
         return;
       }
@@ -958,6 +969,8 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       await FirebaseAuth.instance.sendPasswordResetEmail(
         email: emailController.text.trim(),
       );
+
+      if (!mounted) return;
 
       showMessage('Password reset email sent');
       Navigator.pop(context);
@@ -1092,7 +1105,7 @@ class AuthTextField extends StatelessWidget {
         borderRadius: BorderRadius.circular(25),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.12),
+            color: Colors.black.withValues(alpha: 0.12),
             blurRadius: 4,
             offset: const Offset(0, 2),
           ),
@@ -1181,7 +1194,7 @@ class SocialCircleButton extends StatelessWidget {
           shape: BoxShape.circle,
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.18),
+              color: Colors.black.withValues(alpha: 0.18),
               blurRadius: 6,
               offset: const Offset(0, 3),
             ),

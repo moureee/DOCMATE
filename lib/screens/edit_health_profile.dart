@@ -33,6 +33,8 @@ class _EditHealthProfileState extends State<EditHealthProfile> {
         .doc(widget.uid)
         .get();
 
+    if (!mounted) return;
+
     if (doc.exists) {
       Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
 
@@ -57,14 +59,25 @@ class _EditHealthProfileState extends State<EditHealthProfile> {
       'weight': weightController.text.trim(),
       'bloodGroup': bloodGroupController.text.trim(),
       'allergies': allergiesController.text.trim(),
-      'updatedAt': DateTime.now(),
+      'updatedAt': FieldValue.serverTimestamp(),
     });
+
+    if (!mounted) return;
 
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Health profile updated')),
     );
 
     Navigator.pop(context);
+  }
+
+  @override
+  void dispose() {
+    heightController.dispose();
+    weightController.dispose();
+    bloodGroupController.dispose();
+    allergiesController.dispose();
+    super.dispose();
   }
 
   @override
@@ -154,7 +167,7 @@ class _EditHealthProfileState extends State<EditHealthProfile> {
         borderRadius: BorderRadius.circular(18),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.08),
+            color: Colors.black.withValues(alpha: 0.08),
             blurRadius: 6,
           ),
         ],
