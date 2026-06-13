@@ -1,9 +1,9 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 
-import 'core/app_theme.dart';
-import 'firebase_options.dart';
-import 'screens/splash_screen.dart';
+import 'package:docmate/core/theme/app_theme.dart';
+import 'package:docmate/firebase_options.dart';
+import 'package:docmate/features/auth/screens/splash_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
