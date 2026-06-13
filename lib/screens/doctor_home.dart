@@ -1,439 +1,490 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'role_selection_screen.dart';
-import 'doctor_appointments_screen.dart'; // 👈 নতুন import
+
+import '../core/app_theme.dart';
+import '../data/app_data.dart';
+import 'doctor_appointments_screen.dart';
+import 'doctor_availability_screen.dart';
+import 'doctor_insights_screen.dart';
+import 'doctor_patient_info_screen.dart';
+import 'prescription_management_screen.dart';
 
 class DoctorHome extends StatelessWidget {
   const DoctorHome({super.key});
 
-  Future<void> logout(BuildContext context) async {
-    await FirebaseAuth.instance.signOut();
-    if (context.mounted) {
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(builder: (context) => const RoleSelectionScreen()),
-        (route) => false,
-      );
-    }
-  }
+  DoctorModel getCurrentDoctor() {
+    final appData = AppData.instance;
 
-  Future<int> getAppointmentCount(String doctorId, String status) async {
-    QuerySnapshot snapshot = await FirebaseFirestore.instance
-        .collection('appointments')
-        .where('doctorId', isEqualTo: doctorId)
-        .where('status', isEqualTo: status)
-        .get();
-    return snapshot.docs.length;
-  }
-
-  Future<void> toggleAvailability(
-      BuildContext context, String doctorId, bool currentStatus) async {
-    try {
-      await FirebaseFirestore.instance
-          .collection('doctors')
-          .doc(doctorId)
-          .update({'available': !currentStatus});
-
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(!currentStatus
-                ? 'You are now Online ✅'
-                : 'You are now Offline ❌'),
-          ),
-        );
+    for (final doctor in appData.doctors) {
+      if (doctor.name == appData.currentDoctorName) {
+        return doctor;
       }
-    } catch (e) {
-      debugPrint("Error updating availability: $e");
     }
+
+    return appData.doctors.first;
+  }
+
+  void openScreen(
+    BuildContext context,
+    Widget screen,
+  ) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) {
+          return screen;
+        },
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    User? currentUser = FirebaseAuth.instance.currentUser;
+    final appData = AppData.instance;
+    final doctor = getCurrentDoctor();
 
     return Scaffold(
-      backgroundColor: const Color(0xFFE9FFF9),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF00D9B8),
-        title: const Text(
-          'Doctor Dashboard',
-          style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+      body: SafeArea(
+        child: AnimatedBuilder(
+          animation: appData,
+          builder: (context, child) {
+            final appointments = appData.appointments.where((appointment) {
+              return appointment.doctorId == doctor.id;
+            }).toList();
+
+            final pendingCount = appointments.where((appointment) {
+              return appointment.status == 'Pending';
+            }).length;
+
+            final completedCount = appointments.where((appointment) {
+              return appointment.status == 'Completed';
+            }).length;
+
+            return ListView(
+              padding: const EdgeInsets.all(18),
+              children: [
+                buildHeader(doctor),
+                const SizedBox(height: 22),
+                buildStatistics(
+                  totalAppointments: appointments.length,
+                  pendingAppointments: pendingCount,
+                  completedAppointments: completedCount,
+                ),
+                const SizedBox(height: 26),
+                const Text(
+                  'Doctor Services',
+                  style: TextStyle(
+                    fontSize: 19,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                buildServiceGrid(
+                  context,
+                  doctor,
+                ),
+                const SizedBox(height: 26),
+                const Text(
+                  'Upcoming Appointments',
+                  style: TextStyle(
+                    fontSize: 19,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                buildUpcomingAppointments(
+                  context,
+                  appointments,
+                ),
+              ],
+            );
+          },
         ),
-        centerTitle: true,
-        elevation: 0,
-        actions: [
-          IconButton(
-            onPressed: () => logout(context),
-            icon: const Icon(Icons.logout, color: Colors.black),
+      ),
+    );
+  }
+
+  Widget buildHeader(DoctorModel doctor) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppColors.primary,
+        borderRadius: BorderRadius.circular(24),
+      ),
+      child: Row(
+        children: [
+          const CircleAvatar(
+            radius: 38,
+            backgroundColor: Colors.white,
+            child: Icon(
+              Icons.medical_services,
+              size: 40,
+              color: AppColors.primaryDark,
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Welcome,',
+                  style: TextStyle(
+                    color: Colors.black54,
+                  ),
+                ),
+                Text(
+                  doctor.name,
+                  style: const TextStyle(
+                    fontSize: 21,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(doctor.specialty),
+                const SizedBox(height: 4),
+                Text(
+                  '⭐ ${doctor.rating} • '
+                  '${doctor.experience} years',
+                ),
+              ],
+            ),
           ),
         ],
       ),
-      body: currentUser == null
-          ? const Center(child: Text('No doctor logged in'))
-          : StreamBuilder<DocumentSnapshot>(
-              stream: FirebaseFirestore.instance
-                  .collection('doctors')
-                  .doc(currentUser.uid)
-                  .snapshots(),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(
-                    child: CircularProgressIndicator(color: Color(0xFF00D9B8)),
-                  );
-                }
-
-                if (!snapshot.hasData || !snapshot.data!.exists) {
-                  return const Center(child: Text('Doctor profile not found'));
-                }
-
-                Map<String, dynamic> doctorData =
-                    snapshot.data!.data() as Map<String, dynamic>;
-
-                String name = doctorData['name'] ?? 'Doctor';
-                String specialty = doctorData['specialty'] ?? 'Specialist';
-                String email = doctorData['email'] ?? '';
-                bool approved = doctorData['approved'] ?? false;
-                bool available = doctorData['available'] ?? true;
-
-                return SingleChildScrollView(
-                  padding: const EdgeInsets.all(18),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Profile Card
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(18),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(18),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.08),
-                              blurRadius: 6,
-                              offset: const Offset(0, 3),
-                            ),
-                          ],
-                        ),
-                        child: Row(
-                          children: [
-                            const CircleAvatar(
-                              radius: 32,
-                              backgroundColor: Color(0xFF00D9B8),
-                              child: Icon(Icons.medical_services,
-                                  color: Colors.white, size: 36),
-                            ),
-                            const SizedBox(width: 15),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text('Dr. $name',
-                                      style: const TextStyle(
-                                          fontSize: 20,
-                                          fontWeight: FontWeight.bold)),
-                                  const SizedBox(height: 5),
-                                  Text(specialty,
-                                      style: const TextStyle(
-                                          fontSize: 14,
-                                          color: Colors.black87,
-                                          fontWeight: FontWeight.w600)),
-                                  const SizedBox(height: 4),
-                                  Text(email,
-                                      style: const TextStyle(
-                                          fontSize: 12, color: Colors.black54)),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 15),
-
-                      // Status Bar
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(14),
-                        decoration: BoxDecoration(
-                          color: approved
-                              ? Colors.green.shade50
-                              : Colors.orange.shade50,
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(
-                              color: approved ? Colors.green : Colors.orange),
-                        ),
-                        child: Text(
-                          approved
-                              ? 'Account Status: Approved by Admin'
-                              : 'Account Status: Pending Admin Approval',
-                          style: TextStyle(
-                            color: approved
-                                ? Colors.green.shade800
-                                : Colors.orange.shade900,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 22),
-
-                      const Text('Doctor Insights',
-                          style: TextStyle(
-                              fontSize: 18, fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 12),
-
-                      // Insights Cards
-                      Row(
-                        children: [
-                          Expanded(
-                            child: DoctorCountCard(
-                              title: 'Pending',
-                              icon: Icons.pending_actions,
-                              future: getAppointmentCount(
-                                  currentUser.uid, 'pending'),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: DoctorCountCard(
-                              title: 'Completed',
-                              icon: Icons.check_circle,
-                              future: getAppointmentCount(
-                                  currentUser.uid, 'completed'),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 22),
-
-                      const Text('Doctor Services',
-                          style: TextStyle(
-                              fontSize: 18, fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 12),
-
-                      // Grid View Services
-                      GridView.count(
-                        crossAxisCount: 2,
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        crossAxisSpacing: 14,
-                        mainAxisSpacing: 14,
-                        children: [
-                          // ✅ Appointments — এখন কাজ করবে
-                          DoctorFeatureCard(
-                            title: 'Appointments',
-                            icon: Icons.calendar_month,
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) =>
-                                      DoctorAppointmentsScreen(
-                                    doctorId: currentUser.uid,
-                                    doctorName: name,
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-
-                          // ✅ Availability Toggle — এখন Snackbar দেখাবে
-                          DoctorFeatureCard(
-                            title: available ? 'Set Offline' : 'Set Online',
-                            icon: available
-                                ? Icons.wifi
-                                : Icons.wifi_off,
-                            onTap: () => toggleAvailability(
-                                context, currentUser.uid, available),
-                          ),
-
-                          // ✅ Prescriptions — Appointments screen-এ filter করে দেখাবে
-                          DoctorFeatureCard(
-                            title: 'Prescriptions',
-                            icon: Icons.medication,
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) =>
-                                      DoctorAppointmentsScreen(
-                                    doctorId: currentUser.uid,
-                                    doctorName: name,
-                                    initialFilter: 'completed', // 👈 completed appointments
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-
-                          // ✅ Patient Records — accepted + completed রোগীদের দেখাবে
-                          DoctorFeatureCard(
-                            title: 'Patient Records',
-                            icon: Icons.folder_shared,
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) =>
-                                      DoctorAppointmentsScreen(
-                                    doctorId: currentUser.uid,
-                                    doctorName: name,
-                                    initialFilter: 'accepted', // 👈 accepted patients
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 22),
-
-                      // Availability Bottom Banner
-                      InkWell(
-                        onTap: () => toggleAvailability(
-                            context, currentUser.uid, available),
-                        borderRadius: BorderRadius.circular(18),
-                        child: Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: Colors.black,
-                            borderRadius: BorderRadius.circular(18),
-                            border: Border.all(
-                                color: const Color(0xFF00D9B8), width: 3),
-                          ),
-                          child: Row(
-                            children: [
-                              Icon(
-                                available
-                                    ? Icons.check_circle
-                                    : Icons.cancel,
-                                color: available
-                                    ? const Color(0xFF00D9B8)
-                                    : Colors.redAccent,
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Text(
-                                  available
-                                      ? 'You are currently Available (Tap to go Offline)'
-                                      : 'You are currently Unavailable (Tap to go Online)',
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 13,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              },
-            ),
     );
   }
-}
 
-// ── Insights Count Card ──────────────────────────────────────
-class DoctorCountCard extends StatelessWidget {
-  final String title;
-  final IconData icon;
-  final Future<int> future;
-
-  const DoctorCountCard({
-    super.key,
-    required this.title,
-    required this.icon,
-    required this.future,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return FutureBuilder<int>(
-      future: future,
-      builder: (context, snapshot) {
-        String count = '0';
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          count = '...';
-        } else if (snapshot.hasData) {
-          count = snapshot.data.toString();
-        }
-
-        return Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.black,
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: const Color(0xFF00D9B8), width: 3),
+  Widget buildStatistics({
+    required int totalAppointments,
+    required int pendingAppointments,
+    required int completedAppointments,
+  }) {
+    return Row(
+      children: [
+        Expanded(
+          child: buildStatCard(
+            title: 'Patients',
+            value: totalAppointments.toString(),
+            icon: Icons.people,
           ),
-          child: Column(
-            children: [
-              Icon(icon, color: const Color(0xFF9FF5E5), size: 34),
-              const SizedBox(height: 10),
-              Text(count,
-                  style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 26,
-                      fontWeight: FontWeight.bold)),
-              const SizedBox(height: 5),
-              Text(title,
-                  style:
-                      const TextStyle(color: Colors.white70, fontSize: 13)),
-            ],
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: buildStatCard(
+            title: 'Pending',
+            value: pendingAppointments.toString(),
+            icon: Icons.pending_actions,
           ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: buildStatCard(
+            title: 'Completed',
+            value: completedAppointments.toString(),
+            icon: Icons.task_alt,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget buildStatCard({
+    required String title,
+    required String value,
+    required IconData icon,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: 8,
+        vertical: 16,
+      ),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: Colors.grey.shade300,
+        ),
+      ),
+      child: Column(
+        children: [
+          Icon(
+            icon,
+            color: AppColors.primaryDark,
+          ),
+          const SizedBox(height: 7),
+          Text(
+            value,
+            style: const TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          Text(
+            title,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: Colors.black54,
+              fontSize: 12,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget buildServiceGrid(
+    BuildContext context,
+    DoctorModel doctor,
+  ) {
+    return GridView.count(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      crossAxisCount: 2,
+      crossAxisSpacing: 12,
+      mainAxisSpacing: 12,
+      childAspectRatio: 1.25,
+      children: [
+        buildServiceCard(
+          context: context,
+          title: 'Appointments',
+          icon: Icons.calendar_month,
+          screen: const DoctorAppointmentsScreen(),
+        ),
+        buildServiceCard(
+          context: context,
+          title: 'Time Slots',
+          icon: Icons.schedule,
+          screen: DoctorAvailabilityScreen(
+            doctor: doctor,
+          ),
+        ),
+        buildServiceCard(
+          context: context,
+          title: 'Prescriptions',
+          icon: Icons.receipt_long,
+          screen: PrescriptionManagementScreen(
+            doctorName: doctor.name,
+          ),
+        ),
+        buildServiceCard(
+          context: context,
+          title: 'Patient Information',
+          icon: Icons.folder_shared_outlined,
+          screen: DoctorPatientInfoScreen(
+            doctor: doctor,
+          ),
+        ),
+        buildServiceCard(
+          context: context,
+          title: 'Basic Insights',
+          icon: Icons.analytics_outlined,
+          screen: DoctorInsightsScreen(
+            doctor: doctor,
+          ),
+        ),
+        buildAverageTimeCard(),
+      ],
+    );
+  }
+
+  Widget buildServiceCard({
+    required BuildContext context,
+    required String title,
+    required IconData icon,
+    required Widget screen,
+  }) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(20),
+      onTap: () {
+        openScreen(
+          context,
+          screen,
         );
       },
-    );
-  }
-}
-
-// ── Feature Grid Card ────────────────────────────────────────
-class DoctorFeatureCard extends StatelessWidget {
-  final String title;
-  final IconData icon;
-  final VoidCallback onTap;
-
-  const DoctorFeatureCard({
-    super.key,
-    required this.title,
-    required this.icon,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(18),
       child: Container(
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.all(15),
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(18),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.08),
-              blurRadius: 6,
-              offset: const Offset(0, 3),
-            ),
-          ],
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: Colors.grey.shade300,
+          ),
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, size: 40, color: const Color(0xFF00D9B8)),
-            const SizedBox(height: 12),
-            Text(title,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                    fontWeight: FontWeight.bold, fontSize: 13)),
+            CircleAvatar(
+              backgroundColor: AppColors.lightMint,
+              child: Icon(
+                icon,
+                color: AppColors.primaryDark,
+              ),
+            ),
+            const SizedBox(height: 9),
+            Text(
+              title,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget buildAverageTimeCard() {
+    return Container(
+      padding: const EdgeInsets.all(15),
+      decoration: BoxDecoration(
+        color: AppColors.dark,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: const Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          CircleAvatar(
+            backgroundColor: AppColors.primary,
+            child: Icon(
+              Icons.timer_outlined,
+              color: AppColors.dark,
+            ),
+          ),
+          SizedBox(height: 9),
+          Text(
+            'Average Time',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          SizedBox(height: 4),
+          Text(
+            '12 minutes',
+            style: TextStyle(
+              color: Colors.white70,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget buildUpcomingAppointments(
+    BuildContext context,
+    List<AppointmentModel> appointments,
+  ) {
+    final activeAppointments = appointments.where((appointment) {
+      return appointment.status == 'Pending' ||
+          appointment.status == 'Accepted';
+    }).toList();
+
+    activeAppointments.sort((first, second) {
+      return first.date.compareTo(second.date);
+    });
+
+    if (activeAppointments.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(22),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(
+            color: Colors.grey.shade300,
+          ),
+        ),
+        child: const Center(
+          child: Text(
+            'No upcoming appointments.',
+          ),
+        ),
+      );
+    }
+
+    final displayedAppointments = activeAppointments.take(3);
+
+    return Column(
+      children: [
+        ...displayedAppointments.map(
+          buildUpcomingCard,
+        ),
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton(
+            onPressed: () {
+              openScreen(
+                context,
+                const DoctorAppointmentsScreen(),
+              );
+            },
+            child: const Text(
+              'View All Appointments',
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget buildUpcomingCard(
+    AppointmentModel appointment,
+  ) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 11),
+      padding: const EdgeInsets.all(15),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: Colors.grey.shade300,
+        ),
+      ),
+      child: Row(
+        children: [
+          const CircleAvatar(
+            backgroundColor: AppColors.lightMint,
+            child: Icon(
+              Icons.person,
+              color: AppColors.primaryDark,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  appointment.patientName,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                Text(
+                  '${formatDate(appointment.date)} • '
+                  '${appointment.time}',
+                  style: const TextStyle(
+                    color: Colors.black54,
+                  ),
+                ),
+                Text(
+                  appointment.symptoms,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+          Text(
+            appointment.status,
+            style: const TextStyle(
+              color: AppColors.primaryDark,
+              fontWeight: FontWeight.bold,
+              fontSize: 12,
+            ),
+          ),
+        ],
       ),
     );
   }

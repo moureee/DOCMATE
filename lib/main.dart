@@ -1,10 +1,11 @@
-import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/material.dart';
 
+import 'core/app_theme.dart';
 import 'firebase_options.dart';
 import 'screens/splash_screen.dart';
 
-void main() async {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   await Firebase.initializeApp(
@@ -22,10 +23,7 @@ class DocMateApp extends StatelessWidget {
     return MaterialApp(
       title: 'DocMate',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        primaryColor: const Color(0xFF00D9B8),
-        scaffoldBackgroundColor: const Color(0xFFFDFEFE),
-      ),
+      theme: AppTheme.lightTheme,
       home: const SplashScreen(),
     );
   }

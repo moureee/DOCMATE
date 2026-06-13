@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+
+import '../core/app_theme.dart';
+import '../data/app_data.dart';
+import 'doctor_profile_screen.dart';
 
 class AiSymptomCheckerScreen extends StatefulWidget {
   const AiSymptomCheckerScreen({super.key});
@@ -9,338 +12,175 @@ class AiSymptomCheckerScreen extends StatefulWidget {
 }
 
 class _AiSymptomCheckerScreenState extends State<AiSymptomCheckerScreen> {
-  static const Color mainColor = Color(0xFF00DDB3);
-  static const Color lightColor = Color(0xFFE8FFF8);
+  final List<String> symptoms = [
+    'Fever',
+    'Headache',
+    'Cough',
+    'Weakness',
+    'Chest pain',
+    'Breathing difficulty',
+    'Fast heartbeat',
+    'Skin rash',
+    'Skin itching',
+    'Joint pain',
+    'Back pain',
+    'Stomach pain',
+    'Vomiting',
+  ];
 
-  final TextEditingController symptomsController = TextEditingController();
+  final Set<String> selectedSymptoms = {};
 
-  bool isLoading = false;
-  bool hasResult = false;
+  String? suggestedDepartment;
+  String? healthSuggestion;
+  DoctorModel? recommendedDoctor;
 
-  String department = "";
-  String urgency = "";
-  String reason = "";
-  String suggestion = "";
-  String suggestedDoctor = "";
-  String matchedKeywords = "";
-
-  @override
-  void dispose() {
-    symptomsController.dispose();
-    super.dispose();
-  }
-
-  void showMessage(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
-  }
-
-  Future<void> analyzeSymptoms() async {
-    final symptoms = symptomsController.text.trim();
-
-    if (symptoms.length < 3) {
-      showMessage("Please describe your symptoms first");
+  void checkSymptoms() {
+    if (selectedSymptoms.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please select at least one symptom.'),
+        ),
+      );
       return;
     }
 
+    final appData = AppData.instance;
+    final selected = selectedSymptoms.toList();
+
+    final department = appData.suggestDepartment(selected);
+
+    DoctorModel? doctor;
+
+    for (final item in appData.rankedDoctors) {
+      if (item.specialty == department) {
+        doctor = item;
+        break;
+      }
+    }
+
+    doctor ??=
+        appData.rankedDoctors.isNotEmpty ? appData.rankedDoctors.first : null;
+
     setState(() {
-      isLoading = true;
-      hasResult = false;
+      suggestedDepartment = department;
+      healthSuggestion = appData.healthSuggestion(selected);
+      recommendedDoctor = doctor;
     });
-
-    try {
-      final rulesSnapshot =
-          await FirebaseFirestore.instance.collection("symptom_rules").get();
-
-      if (rulesSnapshot.docs.isEmpty) {
-        setState(() {
-          isLoading = false;
-          hasResult = false;
-        });
-
-        showMessage("No AI rules found. Admin must add symptom rules first.");
-        return;
-      }
-
-      final bestRule = findBestRule(symptoms, rulesSnapshot.docs);
-
-      if (bestRule == null) {
-        final doctor = await findDoctorFromFirestore("General Medicine");
-
-        setState(() {
-          department = "General Medicine";
-          urgency = "Low";
-          reason =
-              "No exact symptom rule matched. General Medicine is suggested for initial consultation.";
-          suggestion = "Book a general consultation if symptoms continue.";
-          suggestedDoctor = doctor;
-          matchedKeywords = "No exact keyword match";
-          hasResult = true;
-          isLoading = false;
-        });
-
-        return;
-      }
-
-      final ruleData = bestRule.data();
-
-      final selectedDepartment =
-          ruleData["department"]?.toString() ?? "General Medicine";
-
-      final doctor = await findDoctorFromFirestore(selectedDepartment);
-
-      setState(() {
-        department = selectedDepartment;
-        urgency = ruleData["urgency"]?.toString() ?? "Medium";
-        reason = ruleData["reason"]?.toString() ??
-            "Based on your symptoms, $selectedDepartment is suitable for consultation.";
-        suggestion = ruleData["suggestion"]?.toString() ??
-            "Please consult a doctor for proper medical advice.";
-        suggestedDoctor = doctor;
-        matchedKeywords = getMatchedKeywords(symptoms, ruleData);
-        hasResult = true;
-        isLoading = false;
-      });
-    } catch (e) {
-      debugPrint("Analyze symptoms error: $e");
-
-      setState(() {
-        isLoading = false;
-      });
-
-      showMessage("Could not analyze symptoms");
-    }
   }
 
-  QueryDocumentSnapshot<Map<String, dynamic>>? findBestRule(
-    String symptoms,
-    List<QueryDocumentSnapshot<Map<String, dynamic>>> rules,
-  ) {
-    final symptomsText = symptoms.toLowerCase();
-
-    QueryDocumentSnapshot<Map<String, dynamic>>? bestRule;
-    int bestScore = 0;
-
-    for (final rule in rules) {
-      final data = rule.data();
-
-      if (data["active"] == false) {
-        continue;
-      }
-
-      final keywordsRaw = data["keywords"];
-
-      if (keywordsRaw is! List) {
-        continue;
-      }
-
-      int matchedKeywordCount = 0;
-
-      for (final keyword in keywordsRaw) {
-        final word = keyword.toString().toLowerCase().trim();
-
-        if (word.isNotEmpty && symptomsText.contains(word)) {
-          matchedKeywordCount++;
-        }
-      }
-
-      final priority = data["priority"] is int ? data["priority"] as int : 0;
-      final finalScore = matchedKeywordCount * 10 + priority;
-
-      if (matchedKeywordCount > 0 && finalScore > bestScore) {
-        bestScore = finalScore;
-        bestRule = rule;
-      }
-    }
-
-    return bestRule;
-  }
-
-  String getMatchedKeywords(String symptoms, Map<String, dynamic> ruleData) {
-    final symptomsText = symptoms.toLowerCase();
-    final keywordsRaw = ruleData["keywords"];
-
-    if (keywordsRaw is! List) {
-      return "Not found";
-    }
-
-    final matched = <String>[];
-
-    for (final keyword in keywordsRaw) {
-      final word = keyword.toString().toLowerCase().trim();
-
-      if (word.isNotEmpty && symptomsText.contains(word)) {
-        matched.add(keyword.toString());
-      }
-    }
-
-    if (matched.isEmpty) {
-      return "Not found";
-    }
-
-    return matched.join(", ");
-  }
-
-  Future<String> findDoctorFromFirestore(String dept) async {
-    try {
-      final snapshot =
-          await FirebaseFirestore.instance.collection("doctors").get();
-
-      String bestDoctor = "No matching doctor available";
-      double bestRating = 0;
-
-      for (final doc in snapshot.docs) {
-        final data = doc.data();
-
-        final approved = data["approved"] == true ||
-            data["isApproved"] == true ||
-            data["status"]?.toString().toLowerCase() == "approved";
-
-        if (!approved) {
-          continue;
-        }
-
-        final doctorName = data["name"]?.toString() ??
-            data["fullName"]?.toString() ??
-            data["doctorName"]?.toString() ??
-            "Doctor";
-
-        final specialty = data["specialty"]?.toString().toLowerCase() ??
-            data["department"]?.toString().toLowerCase() ??
-            "";
-
-        final ratingValue =
-            double.tryParse(data["rating"]?.toString() ?? "0") ?? 0;
-
-        if (specialty.contains(dept.toLowerCase())) {
-          if (ratingValue >= bestRating) {
-            bestRating = ratingValue;
-            bestDoctor = doctorName;
-          }
-        }
-      }
-
-      return bestDoctor;
-    } catch (e) {
-      debugPrint("Doctor search error: $e");
-      return "Could not load doctor";
-    }
-  }
-
-  Color urgencyColor() {
-    final value = urgency.toLowerCase();
-
-    if (value == "emergency") return Colors.red;
-    if (value == "high") return Colors.deepOrange;
-    if (value == "medium") return Colors.orange;
-
-    return Colors.green;
+  void clearSymptoms() {
+    setState(() {
+      selectedSymptoms.clear();
+      suggestedDepartment = null;
+      healthSuggestion = null;
+      recommendedDoctor = null;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey.shade100,
       appBar: AppBar(
-        backgroundColor: mainColor,
-        title: const Text("AI Symptom Checker"),
-        centerTitle: true,
+        title: const Text('AI Symptom Checker'),
+        actions: [
+          IconButton(
+            onPressed: clearSymptoms,
+            icon: const Icon(Icons.refresh),
+            tooltip: 'Clear',
+          ),
+        ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(18),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            buildIntroCard(),
-            const SizedBox(height: 18),
-            buildInputCard(),
-            const SizedBox(height: 18),
-            if (isLoading)
-              const Center(
-                child: Padding(
-                  padding: EdgeInsets.all(20),
-                  child: CircularProgressIndicator(),
-                ),
+            buildIntroductionCard(),
+            const SizedBox(height: 22),
+            const Text(
+              'Select Your Symptoms',
+              style: TextStyle(
+                fontSize: 19,
+                fontWeight: FontWeight.bold,
               ),
-            if (hasResult) buildResultCard(),
-            const SizedBox(height: 18),
-            buildRuleInfoCard(),
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 9,
+              runSpacing: 9,
+              children: symptoms.map((symptom) {
+                final selected = selectedSymptoms.contains(symptom);
+
+                return FilterChip(
+                  label: Text(symptom),
+                  selected: selected,
+                  selectedColor: AppColors.primary,
+                  checkmarkColor: AppColors.dark,
+                  onSelected: (value) {
+                    setState(() {
+                      if (value) {
+                        selectedSymptoms.add(symptom);
+                      } else {
+                        selectedSymptoms.remove(symptom);
+                      }
+                    });
+                  },
+                );
+              }).toList(),
+            ),
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: checkSymptoms,
+                icon: const Icon(Icons.psychology),
+                label: const Text('Check Symptoms'),
+              ),
+            ),
+            if (suggestedDepartment != null) ...[
+              const SizedBox(height: 24),
+              buildResultCard(),
+            ],
           ],
         ),
       ),
     );
   }
 
-  Widget buildIntroCard() {
+  Widget buildIntroductionCard() {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: mainColor,
-        borderRadius: BorderRadius.circular(20),
+        color: AppColors.primary,
+        borderRadius: BorderRadius.circular(22),
       ),
       child: const Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.psychology, size: 42),
+          Icon(
+            Icons.smart_toy_outlined,
+            size: 42,
+          ),
           SizedBox(height: 10),
           Text(
-            "Smart Symptom Analysis",
+            'Smart Department Suggestion',
             style: TextStyle(
-              fontSize: 21,
+              fontSize: 19,
               fontWeight: FontWeight.bold,
             ),
           ),
+          SizedBox(height: 7),
+          Text(
+            'Select symptoms to receive a rule-based department '
+            'and doctor suggestion.',
+          ),
           SizedBox(height: 8),
           Text(
-            "DocMate uses Firebase symptom rules to suggest department, urgency, and doctor.",
-            style: TextStyle(height: 1.4),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget buildInputCard() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.grey.shade300),
-      ),
-      child: Column(
-        children: [
-          TextField(
-            controller: symptomsController,
-            maxLines: 5,
-            decoration: InputDecoration(
-              labelText: "Describe your symptoms",
-              hintText: "Example: fever, cough, headache...",
-              filled: true,
-              fillColor: lightColor,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(14),
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          SizedBox(
-            width: double.infinity,
-            height: 50,
-            child: ElevatedButton.icon(
-              onPressed: isLoading ? null : analyzeSymptoms,
-              icon: const Icon(Icons.search),
-              label: Text(isLoading ? "Analyzing..." : "Analyze Symptoms"),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: mainColor,
-                foregroundColor: Colors.black,
-                textStyle: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
+            'This feature is for demonstration only and does not '
+            'provide a medical diagnosis.',
+            style: TextStyle(
+              fontSize: 12,
             ),
           ),
         ],
@@ -349,154 +189,126 @@ class _AiSymptomCheckerScreenState extends State<AiSymptomCheckerScreen> {
   }
 
   Widget buildResultCard() {
+    final doctor = recommendedDoctor;
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: mainColor),
+        border: Border.all(
+          color: AppColors.primary,
+          width: 1.5,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            "AI Result",
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: 14),
-          buildResultRow("Suggested Department", department),
-          buildResultRow("Suggested Doctor", suggestedDoctor),
-          buildUrgencyRow(),
-          buildResultRow("Matched Keywords", matchedKeywords),
-          buildResultRow("Reason", reason),
-          buildResultRow("Health Suggestion", suggestion),
-          const SizedBox(height: 12),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.red.shade50,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Text(
-              "Warning: This is not a medical diagnosis. Please consult a doctor for proper treatment.",
-              style: TextStyle(
-                color: Colors.red,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget buildRuleInfoCard() {
-    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream:
-          FirebaseFirestore.instance.collection("symptom_rules").snapshots(),
-      builder: (context, snapshot) {
-        final count = snapshot.data?.docs.length ?? 0;
-
-        return Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(18),
-          decoration: BoxDecoration(
-            color: lightColor,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: mainColor.withOpacity(0.4)),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          const Row(
             children: [
-              const Text(
-                "AI Rule Engine",
-                style: TextStyle(
-                  fontSize: 17,
-                  fontWeight: FontWeight.bold,
-                ),
+              Icon(
+                Icons.auto_awesome,
+                color: AppColors.primaryDark,
               ),
-              const SizedBox(height: 8),
+              SizedBox(width: 8),
               Text(
-                "Firestore rule documents: $count",
-                style: const TextStyle(color: Colors.black87),
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                "AI rules are controlled by admin. No demo rules are created from the patient side.",
+                'Smart Result',
                 style: TextStyle(
-                  color: Colors.black54,
-                  fontSize: 13,
+                  fontSize: 19,
+                  fontWeight: FontWeight.bold,
                 ),
               ),
             ],
           ),
-        );
-      },
-    );
-  }
-
-  Widget buildResultRow(String title, String value) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            style: const TextStyle(
-              color: Colors.black54,
-              fontSize: 13,
-            ),
+          const SizedBox(height: 18),
+          buildResultSection(
+            title: 'Suggested Department',
+            value: suggestedDepartment ?? '',
           ),
-          const SizedBox(height: 4),
-          Text(
-            value,
-            style: const TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 15,
-            ),
+          const SizedBox(height: 14),
+          buildResultSection(
+            title: 'Health Suggestion',
+            value: healthSuggestion ?? '',
           ),
-        ],
-      ),
-    );
-  }
-
-  Widget buildUrgencyRow() {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Row(
-        children: [
-          const Text(
-            "Urgency: ",
-            style: TextStyle(
-              color: Colors.black54,
-              fontSize: 13,
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(
-              horizontal: 12,
-              vertical: 6,
-            ),
-            decoration: BoxDecoration(
-              color: urgencyColor().withOpacity(0.15),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Text(
-              urgency,
+          if (doctor != null) ...[
+            const Divider(height: 30),
+            const Text(
+              'Recommended Doctor',
               style: TextStyle(
-                color: urgencyColor(),
                 fontWeight: FontWeight.bold,
               ),
             ),
-          ),
+            const SizedBox(height: 10),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const CircleAvatar(
+                backgroundColor: AppColors.lightMint,
+                child: Icon(
+                  Icons.medical_services,
+                  color: AppColors.primaryDark,
+                ),
+              ),
+              title: Text(
+                doctor.name,
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              subtitle: Text(
+                '${doctor.specialty}\n'
+                'Rating: ${doctor.rating} • '
+                'Queue: ${AppData.instance.predictedQueueMinutes(doctor)} minutes',
+              ),
+              isThreeLine: true,
+              trailing: const Icon(
+                Icons.arrow_forward_ios,
+                size: 17,
+              ),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) {
+                      return DoctorProfileScreen(
+                        doctorId: doctor.id,
+                        doctorName: doctor.name,
+                        specialty: doctor.specialty,
+                        rating: doctor.rating.toString(),
+                        available: doctor.availableSlots.join(', '),
+                      );
+                    },
+                  ),
+                );
+              },
+            ),
+          ],
         ],
       ),
+    );
+  }
+
+  Widget buildResultSection({
+    required String title,
+    required String value,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: const TextStyle(
+            color: Colors.black54,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ],
     );
   }
 }

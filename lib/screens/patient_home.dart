@@ -1,326 +1,273 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 
-import 'doctor_profile_screen.dart';
-import 'patient_appointments_screen.dart';
+import '../core/app_theme.dart';
+import '../data/app_data.dart';
 import 'ai_symptom_checker_screen.dart';
-import 'health_card_screen.dart';
+import 'chat_screen.dart';
+import 'doctor_profile_screen.dart';
 import 'emergency_screen.dart';
+import 'health_card_screen.dart';
+import 'health_profile_screen.dart';
+import 'medicine_screen.dart';
+import 'notifications_screen.dart';
+import 'patient_appointments_screen.dart';
+import 'patient_profile_screen.dart';
+import 'prescription_screen.dart';
+import 'queue_prediction_screen.dart';
+import 'timeline_screen.dart';
 
-class PatientHome extends StatelessWidget {
+class PatientHome extends StatefulWidget {
   const PatientHome({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    return const PatientHomeScreen();
-  }
+  State<PatientHome> createState() => _PatientHomeState();
 }
 
-class PatientHomeScreen extends StatefulWidget {
-  const PatientHomeScreen({super.key});
+class _PatientHomeState extends State<PatientHome> {
+  final TextEditingController searchController = TextEditingController();
 
-  @override
-  State<PatientHomeScreen> createState() => _PatientHomeScreenState();
-}
-
-class _PatientHomeScreenState extends State<PatientHomeScreen> {
-  final TextEditingController _searchController = TextEditingController();
-
-  String patientName = "Patient";
-
-  static const Color mainColor = Color(0xFF00DDB3);
-  static const Color lightColor = Color(0xFFE8FFF8);
-
-  @override
-  void initState() {
-    super.initState();
-    loadPatientName();
-  }
-
-  Future<void> loadPatientName() async {
-    final user = FirebaseAuth.instance.currentUser;
-
-    if (user == null) {
-      setState(() {
-        patientName = "Patient";
-      });
-      return;
-    }
-
-    String name = "Patient";
-
-    try {
-      final patientDoc = await FirebaseFirestore.instance
-          .collection("patients")
-          .doc(user.uid)
-          .get();
-
-      if (patientDoc.exists) {
-        final data = patientDoc.data();
-        if (data != null) {
-          if (data["name"] != null && data["name"].toString().trim().isNotEmpty) {
-            name = data["name"].toString();
-          } else if (data["fullName"] != null && data["fullName"].toString().trim().isNotEmpty) {
-            name = data["fullName"].toString();
-          } else if (data["patientName"] != null && data["patientName"].toString().trim().isNotEmpty) {
-            name = data["patientName"].toString();
-          }
-        }
-      }
-
-      if (name == "Patient") {
-        final userDoc = await FirebaseFirestore.instance
-            .collection("users")
-            .doc(user.uid)
-            .get();
-        if (userDoc.exists) {
-          final data = userDoc.data();
-          if (data != null) {
-            if (data["name"] != null && data["name"].toString().trim().isNotEmpty) {
-              name = data["name"].toString();
-            } else if (data["fullName"] != null && data["fullName"].toString().trim().isNotEmpty) {
-              name = data["fullName"].toString();
-            }
-          }
-        }
-      }
-    } catch (e) {
-      debugPrint("Could not load patient name: $e");
-    }
-
-    if (name == "Patient") {
-      if (user.displayName != null && user.displayName!.trim().isNotEmpty) {
-        name = user.displayName!;
-      } else if (user.email != null && user.email!.trim().isNotEmpty) {
-        name = user.email!.split("@")[0];
-      }
-    }
-
-    if (!mounted) return;
-    setState(() {
-      patientName = name;
-    });
-  }
+  String searchText = '';
 
   @override
   void dispose() {
-    _searchController.dispose();
+    searchController.dispose();
     super.dispose();
   }
 
-  void showMessage(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
-  }
-
-  String getDoctorName(Map<String, dynamic> data) {
-    if (data["name"] != null && data["name"].toString().trim().isNotEmpty) {
-      return data["name"].toString();
-    }
-    if (data["fullName"] != null && data["fullName"].toString().trim().isNotEmpty) {
-      return data["fullName"].toString();
-    }
-    if (data["doctorName"] != null && data["doctorName"].toString().trim().isNotEmpty) {
-      return data["doctorName"].toString();
-    }
-    return "Doctor";
-  }
-
-  String getDoctorSpecialty(Map<String, dynamic> data) {
-    if (data["specialty"] != null && data["specialty"].toString().trim().isNotEmpty) {
-      return data["specialty"].toString();
-    }
-    if (data["department"] != null && data["department"].toString().trim().isNotEmpty) {
-      return data["department"].toString();
-    }
-    return "General";
-  }
-
-  String getDoctorRating(Map<String, dynamic> data) {
-    if (data["rating"] == null) return "0.0";
-    return data["rating"].toString();
-  }
-
-  String getDoctorAvailableText(Map<String, dynamic> data) {
-    if (data["available"] != null && data["available"].toString().trim().isNotEmpty) {
-      return data["available"].toString();
-    }
-    if (data["availability"] != null && data["availability"].toString().trim().isNotEmpty) {
-      return data["availability"].toString();
-    }
-    return "Availability not set";
-  }
-
-  bool isDoctorApproved(Map<String, dynamic> data) {
-    if (data["approved"] == true) return true;
-    if (data["isApproved"] == true) return true;
-    if (data["status"] != null && data["status"].toString().toLowerCase() == "approved") return true;
-    return false;
-  }
-
-  bool matchesSearch(Map<String, dynamic> data) {
-    final searchText = _searchController.text.toLowerCase().trim();
-    if (searchText.isEmpty) return true;
-    final name = getDoctorName(data).toLowerCase();
-    final specialty = getDoctorSpecialty(data).toLowerCase();
-    return name.contains(searchText) || specialty.contains(searchText);
-  }
-
-  void openDoctorProfile(String doctorId, Map<String, dynamic> doctor) {
+  void openScreen(Widget screen) {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => DoctorProfileScreen(
-          doctorId: doctorId,
-          doctorName: getDoctorName(doctor),
-          specialty: getDoctorSpecialty(doctor),
-          rating: getDoctorRating(doctor),
-          available: getDoctorAvailableText(doctor),
-        ),
+        builder: (context) {
+          return screen;
+        },
       ),
-    );
+    ).then((_) {
+      setState(() {});
+    });
   }
 
-  void openBookingsScreen() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => const PatientAppointmentsScreen(),
-      ),
-    );
-  }
+  List<DoctorModel> filteredDoctors() {
+    final doctors = AppData.instance.rankedDoctors;
 
-  void openAiSymptomChecker() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => const AiSymptomCheckerScreen(),
-      ),
-    );
-  }
+    if (searchText.trim().isEmpty) {
+      return doctors;
+    }
 
-  void openHealthCard() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => const HealthCardScreen(),
-      ),
-    );
-  }
+    final query = searchText.toLowerCase().trim();
 
-  void openEmergency() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => const EmergencyScreen(),
-      ),
-    );
+    return doctors.where((doctor) {
+      return doctor.name.toLowerCase().contains(query) ||
+          doctor.specialty.toLowerCase().contains(query);
+    }).toList();
   }
 
   @override
   Widget build(BuildContext context) {
+    final appData = AppData.instance;
+
     return Scaffold(
-      backgroundColor: Colors.grey.shade100,
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: 0,
-        selectedItemColor: mainColor,
-        unselectedItemColor: Colors.black54,
         type: BottomNavigationBarType.fixed,
+        selectedItemColor: AppColors.primaryDark,
+        unselectedItemColor: Colors.black54,
         onTap: (index) {
           if (index == 1) {
-            openBookingsScreen();
+            openScreen(
+              const PatientAppointmentsScreen(),
+            );
           } else if (index == 2) {
-            showMessage("Chat screen will be added later");
+            openScreen(
+              const ChatScreen(),
+            );
           } else if (index == 3) {
-            showMessage("Profile screen will be added later");
+            openScreen(
+              const PatientProfileScreen(),
+            );
           }
         },
         items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: "Home"),
-          BottomNavigationBarItem(icon: Icon(Icons.calendar_month), label: "Bookings"),
-          BottomNavigationBarItem(icon: Icon(Icons.chat_bubble_outline), label: "Chat"),
-          BottomNavigationBarItem(icon: Icon(Icons.person_outline), label: "Profile"),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.home),
+            label: 'Home',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.calendar_month),
+            label: 'Bookings',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.chat_bubble_outline),
+            label: 'Chat',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.person_outline),
+            label: 'Profile',
+          ),
         ],
       ),
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(18),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              buildTopHeader(),
-              const SizedBox(height: 20),
-              buildSearchBox(),
-              const SizedBox(height: 24),
-              buildSectionTitle("Top Doctors"),
-              const SizedBox(height: 12),
-              buildDynamicDoctorList(),
-              const SizedBox(height: 24),
-              buildSectionTitle("Smart Healthcare Features"),
-              const SizedBox(height: 12),
-              buildSmartFeatureGrid(),
-            ],
-          ),
+        child: AnimatedBuilder(
+          animation: appData,
+          builder: (context, child) {
+            return RefreshIndicator(
+              onRefresh: () async {
+                setState(() {});
+              },
+              child: ListView(
+                padding: const EdgeInsets.all(18),
+                children: [
+                  buildHeader(),
+                  const SizedBox(height: 18),
+                  buildSearchSection(),
+                  const SizedBox(height: 24),
+                  buildSectionTitle(
+                    'Smart Healthcare Features',
+                  ),
+                  const SizedBox(height: 12),
+                  buildFeatureGrid(),
+                  const SizedBox(height: 26),
+                  buildSectionTitle(
+                    searchText.isEmpty
+                        ? 'Recommended Doctors'
+                        : 'Search Results',
+                  ),
+                  const SizedBox(height: 12),
+                  buildDoctorList(),
+                ],
+              ),
+            );
+          },
         ),
       ),
     );
   }
 
-  Widget buildTopHeader() {
+  Widget buildHeader() {
+    final unreadCount = AppData.instance.notifications.where((notification) {
+      return !notification.read;
+    }).length;
+
     return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text("Welcome,", style: TextStyle(fontSize: 14, color: Colors.black54)),
-            const SizedBox(height: 4),
-            Text(patientName, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-          ],
+        const CircleAvatar(
+          radius: 25,
+          backgroundColor: AppColors.primary,
+          child: Icon(
+            Icons.person,
+            color: AppColors.dark,
+          ),
         ),
-        Row(
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Welcome back,',
+                style: TextStyle(
+                  color: Colors.black54,
+                ),
+              ),
+              Text(
+                AppData.instance.currentPatientName,
+                style: const TextStyle(
+                  fontSize: 21,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+        ),
+        Stack(
           children: [
             IconButton(
-              onPressed: () => showMessage("Notifications will be added later"),
-              icon: const Icon(Icons.notifications_none),
+              onPressed: () {
+                openScreen(
+                  const NotificationsScreen(),
+                );
+              },
+              icon: const Icon(
+                Icons.notifications_none,
+                size: 28,
+              ),
             ),
-            IconButton(
-              onPressed: () => showMessage("Settings will be added later"),
-              icon: const Icon(Icons.settings),
-            ),
+            if (unreadCount > 0)
+              Positioned(
+                right: 7,
+                top: 5,
+                child: Container(
+                  width: 18,
+                  height: 18,
+                  alignment: Alignment.center,
+                  decoration: const BoxDecoration(
+                    color: AppColors.danger,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Text(
+                    unreadCount.toString(),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ),
           ],
         ),
       ],
     );
   }
 
-  Widget buildSearchBox() {
+  Widget buildSearchSection() {
     return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: Colors.black, borderRadius: BorderRadius.circular(18)),
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: AppColors.dark,
+        borderRadius: BorderRadius.circular(22),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            "Let's Find Your Specialist",
-            style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.bold),
+            'Find Your Specialist',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 19,
+              fontWeight: FontWeight.bold,
+            ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 6),
+          const Text(
+            'Search by doctor name or specialty',
+            style: TextStyle(
+              color: Colors.white70,
+            ),
+          ),
+          const SizedBox(height: 14),
           TextField(
-            controller: _searchController,
-            onChanged: (value) => setState(() {}),
+            controller: searchController,
+            onChanged: (value) {
+              setState(() {
+                searchText = value;
+              });
+            },
             decoration: InputDecoration(
-              hintText: "Search doctor or specialty...",
+              hintText: 'Cardiology, Dermatology...',
               prefixIcon: const Icon(Icons.search),
-              filled: true,
-              fillColor: Colors.white,
-              contentPadding: const EdgeInsets.symmetric(vertical: 10),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(30),
-                borderSide: BorderSide.none,
-              ),
+              suffixIcon: searchText.isEmpty
+                  ? null
+                  : IconButton(
+                      onPressed: () {
+                        searchController.clear();
+
+                        setState(() {
+                          searchText = '';
+                        });
+                      },
+                      icon: const Icon(Icons.close),
+                    ),
             ),
           ),
         ],
@@ -328,121 +275,225 @@ class _PatientHomeScreenState extends State<PatientHomeScreen> {
     );
   }
 
-  Widget buildDynamicDoctorList() {
-    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: FirebaseFirestore.instance.collection("doctors").snapshots(),
-      builder: (context, snapshot) {
-        if (snapshot.hasError) {
-          return buildInfoBox(
-            title: "Could not load doctors",
-            subtitle: "Check Firestore rules or internet connection.",
-          );
-        }
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(
-            child: Padding(padding: EdgeInsets.all(20), child: CircularProgressIndicator()),
-          );
-        }
+  Widget buildFeatureGrid() {
+    final features = [
+      HomeFeature(
+        title: 'Symptom Checker',
+        icon: Icons.psychology,
+        screen: const AiSymptomCheckerScreen(),
+      ),
+      HomeFeature(
+        title: 'Queue Prediction',
+        icon: Icons.hourglass_bottom,
+        screen: const QueuePredictionScreen(),
+      ),
+      HomeFeature(
+        title: 'Emergency',
+        icon: Icons.emergency,
+        screen: const EmergencyScreen(),
+        danger: true,
+      ),
+      HomeFeature(
+        title: 'Medicines',
+        icon: Icons.medication,
+        screen: const MedicineScreen(),
+      ),
+      HomeFeature(
+        title: 'Health Profile',
+        icon: Icons.monitor_heart_outlined,
+        screen: const HealthProfileScreen(),
+      ),
+      HomeFeature(
+        title: 'Health Card',
+        icon: Icons.badge_outlined,
+        screen: const HealthCardScreen(),
+      ),
+      HomeFeature(
+        title: 'Prescriptions',
+        icon: Icons.receipt_long,
+        screen: const PrescriptionScreen(),
+      ),
+      HomeFeature(
+        title: 'Timeline',
+        icon: Icons.timeline,
+        screen: const TimelineScreen(),
+      ),
+    ];
 
-        final docs = snapshot.data?.docs ?? [];
-        final approvedDoctors = docs.where((doc) {
-          final data = doc.data();
-          return isDoctorApproved(data) && matchesSearch(data);
-        }).toList();
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: features.length,
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        crossAxisSpacing: 12,
+        mainAxisSpacing: 12,
+        childAspectRatio: 1.35,
+      ),
+      itemBuilder: (context, index) {
+        final feature = features[index];
 
-        if (approvedDoctors.isEmpty) {
-          return buildInfoBox(
-            title: "No approved doctors available",
-            subtitle: "Doctors must be added and approved by admin before patients can book appointments.",
-          );
-        }
-
-        return Column(
-          children: approvedDoctors.map((doc) {
-            return buildDoctorCard(doc.id, doc.data());
-          }).toList(),
+        return InkWell(
+          borderRadius: BorderRadius.circular(20),
+          onTap: () {
+            openScreen(feature.screen);
+          },
+          child: Container(
+            padding: const EdgeInsets.all(15),
+            decoration: BoxDecoration(
+              color: feature.danger ? const Color(0xFFFFECEB) : Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: feature.danger ? AppColors.danger : Colors.grey.shade300,
+              ),
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                CircleAvatar(
+                  backgroundColor:
+                      feature.danger ? AppColors.danger : AppColors.lightMint,
+                  child: Icon(
+                    feature.icon,
+                    color:
+                        feature.danger ? Colors.white : AppColors.primaryDark,
+                  ),
+                ),
+                const SizedBox(height: 9),
+                Text(
+                  feature.title,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+          ),
         );
       },
     );
   }
 
-  Widget buildInfoBox({required String title, required String subtitle}) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Colors.grey.shade300),
-      ),
-      child: Column(
-        children: [
-          const Icon(Icons.info_outline, color: mainColor, size: 34),
-          const SizedBox(height: 10),
-          Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-          const SizedBox(height: 6),
-          Text(subtitle, textAlign: TextAlign.center, style: const TextStyle(color: Colors.black54, fontSize: 13)),
-        ],
-      ),
+  Widget buildDoctorList() {
+    final doctors = filteredDoctors();
+
+    if (doctors.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: Colors.grey.shade300,
+          ),
+        ),
+        child: const Column(
+          children: [
+            Icon(
+              Icons.search_off,
+              size: 42,
+              color: Colors.black54,
+            ),
+            SizedBox(height: 10),
+            Text(
+              'No matching doctors found.',
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Column(
+      children: doctors.map((doctor) {
+        return buildDoctorCard(doctor);
+      }).toList(),
     );
   }
 
-  Widget buildSectionTitle(String title) {
-    return Text(title, style: const TextStyle(fontSize: 19, fontWeight: FontWeight.bold));
-  }
-
-  Widget buildDoctorCard(String doctorId, Map<String, dynamic> doctor) {
-    final doctorName = getDoctorName(doctor);
-    final specialty = getDoctorSpecialty(doctor);
-    final rating = getDoctorRating(doctor);
-    final available = getDoctorAvailableText(doctor);
+  Widget buildDoctorCard(DoctorModel doctor) {
+    final queueTime = AppData.instance.predictedQueueMinutes(doctor);
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 14),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(color: mainColor, borderRadius: BorderRadius.circular(18)),
+      margin: const EdgeInsets.only(bottom: 13),
+      padding: const EdgeInsets.all(15),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: Colors.grey.shade300,
+        ),
+      ),
       child: Row(
         children: [
           const CircleAvatar(
             radius: 32,
-            backgroundColor: Colors.white,
-            child: Icon(Icons.medical_services, color: mainColor, size: 32),
+            backgroundColor: AppColors.lightMint,
+            child: Icon(
+              Icons.medical_services,
+              size: 31,
+              color: AppColors.primaryDark,
+            ),
           ),
-          const SizedBox(width: 14),
+          const SizedBox(width: 13),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(doctorName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                const SizedBox(height: 4),
-                Text(specialty),
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    const Icon(Icons.star, size: 16, color: Colors.amber),
-                    const SizedBox(width: 4),
-                    Text(rating),
-                  ],
+                Text(
+                  doctor.name,
+                  style: const TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
-                const SizedBox(height: 4),
-                Text(available, style: const TextStyle(fontSize: 12)),
+                const SizedBox(height: 3),
+                Text(
+                  doctor.specialty,
+                  style: const TextStyle(
+                    color: Colors.black54,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  '⭐ ${doctor.rating}  •  '
+                  '$queueTime min wait',
+                  style: const TextStyle(
+                    fontSize: 12,
+                  ),
+                ),
               ],
             ),
           ),
           Column(
             children: [
               IconButton(
-                onPressed: () => showMessage("$doctorName added to favorite"),
-                icon: const Icon(Icons.favorite_border),
-              ),
-              ElevatedButton(
-                onPressed: () => openDoctorProfile(doctorId, doctor),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.black,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                onPressed: () {
+                  AppData.instance.toggleFavorite(
+                    doctor.id,
+                  );
+                },
+                icon: Icon(
+                  doctor.isFavorite ? Icons.favorite : Icons.favorite_border,
+                  color: doctor.isFavorite ? Colors.red : Colors.black45,
                 ),
-                child: const Text("View"),
+              ),
+              IconButton(
+                onPressed: () {
+                  openScreen(
+                    DoctorProfileScreen(
+                      doctorId: doctor.id,
+                      doctorName: doctor.name,
+                      specialty: doctor.specialty,
+                      rating: doctor.rating.toString(),
+                      available: doctor.availableSlots.join(', '),
+                    ),
+                  );
+                },
+                icon: const Icon(
+                  Icons.arrow_forward_ios,
+                  size: 17,
+                ),
               ),
             ],
           ),
@@ -451,84 +502,27 @@ class _PatientHomeScreenState extends State<PatientHomeScreen> {
     );
   }
 
-  Widget buildSmartFeatureGrid() {
-    return Column(
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: buildFeatureCard(
-                icon: Icons.psychology,
-                title: "AI Symptom Checker",
-                subtitle: "Rule-based engine",
-                onTap: openAiSymptomChecker,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: buildFeatureCard(
-                icon: Icons.timer,
-                title: "Queue Prediction",
-                subtitle: "Waiting time",
-                onTap: () => showMessage("Queue prediction appears in doctor profile"),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: buildFeatureCard(
-                icon: Icons.emergency,
-                title: "Emergency Mode",
-                subtitle: "Quick help",
-                onTap: openEmergency, // ✅ এখন কাজ করবে
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: buildFeatureCard(
-                icon: Icons.health_and_safety,
-                title: "Health Card",
-                subtitle: "BMI & allergies",
-                onTap: openHealthCard,
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget buildFeatureCard({
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    required VoidCallback onTap,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(18),
-      child: Container(
-        padding: const EdgeInsets.all(14),
-        height: 125,
-        decoration: BoxDecoration(
-          color: lightColor,
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: mainColor.withValues(alpha: 0.4)),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(icon, color: mainColor, size: 32),
-            const Spacer(),
-            Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-            const SizedBox(height: 4),
-            Text(subtitle, style: const TextStyle(fontSize: 12, color: Colors.black54)),
-          ],
-        ),
+  Widget buildSectionTitle(String title) {
+    return Text(
+      title,
+      style: const TextStyle(
+        fontSize: 19,
+        fontWeight: FontWeight.bold,
       ),
     );
   }
+}
+
+class HomeFeature {
+  const HomeFeature({
+    required this.title,
+    required this.icon,
+    required this.screen,
+    this.danger = false,
+  });
+
+  final String title;
+  final IconData icon;
+  final Widget screen;
+  final bool danger;
 }
