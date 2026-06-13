@@ -11,52 +11,89 @@ class DoctorAvailabilityScreen extends StatelessWidget {
 
   final DoctorModel doctor;
 
-  void showAddSlotDialog(BuildContext context) {
+  Future<void> showAddSlotDialog(BuildContext context) async {
     final timeController = TextEditingController();
 
-    showDialog<void>(
+    await showDialog<void>(
       context: context,
       builder: (dialogContext) {
-        return AlertDialog(
-          title: const Text('Add Time Slot'),
-          content: TextField(
-            controller: timeController,
-            decoration: const InputDecoration(
-              labelText: 'Time',
-              hintText: 'Example: 05:30 PM',
-              prefixIcon: Icon(Icons.schedule),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.pop(dialogContext);
-              },
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                final time = timeController.text.trim();
+        bool isSaving = false;
 
-                if (time.isEmpty) {
-                  return;
-                }
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Add Time Slot'),
+              content: TextField(
+                controller: timeController,
+                enabled: !isSaving,
+                decoration: const InputDecoration(
+                  labelText: 'Time',
+                  hintText: 'Example: 05:30 PM',
+                  prefixIcon: Icon(Icons.schedule),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isSaving
+                      ? null
+                      : () {
+                          Navigator.pop(dialogContext);
+                        },
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: isSaving
+                      ? null
+                      : () async {
+                          final time = timeController.text.trim();
 
-                AppData.instance.addAvailability(
-                  doctor.id,
-                  time,
-                );
+                          if (time.isEmpty) {
+                            return;
+                          }
 
-                Navigator.pop(dialogContext);
-              },
-              child: const Text('Add Slot'),
-            ),
-          ],
+                          setDialogState(() {
+                            isSaving = true;
+                          });
+
+                          try {
+                            await AppData.instance.addAvailability(
+                              doctor.id,
+                              time,
+                            );
+
+                            if (dialogContext.mounted) {
+                              Navigator.pop(dialogContext);
+                            }
+                          } catch (_) {
+                            if (!dialogContext.mounted) {
+                              return;
+                            }
+
+                            setDialogState(() {
+                              isSaving = false;
+                            });
+
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  'Could not add the time slot. Please try again.',
+                                ),
+                              ),
+                            );
+                          }
+                        },
+                  child: Text(
+                    isSaving ? 'Saving...' : 'Add Slot',
+                  ),
+                ),
+              ],
+            );
+          },
         );
       },
-    ).whenComplete(
-      timeController.dispose,
     );
+
+    timeController.dispose();
   }
 
   @override
@@ -126,11 +163,25 @@ class DoctorAvailabilityScreen extends StatelessWidget {
                   ),
                   trailing: IconButton(
                     tooltip: 'Remove slot',
-                    onPressed: () {
-                      appData.removeAvailability(
-                        doctor.id,
-                        time,
-                      );
+                    onPressed: () async {
+                      try {
+                        await appData.removeAvailability(
+                          doctor.id,
+                          time,
+                        );
+                      } catch (_) {
+                        if (!context.mounted) {
+                          return;
+                        }
+
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'Could not remove the time slot. Please try again.',
+                            ),
+                          ),
+                        );
+                      }
                     },
                     icon: const Icon(
                       Icons.delete_outline,

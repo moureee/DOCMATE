@@ -11,18 +11,6 @@ import 'prescription_management_screen.dart';
 class DoctorHome extends StatelessWidget {
   const DoctorHome({super.key});
 
-  DoctorModel getCurrentDoctor() {
-    final appData = AppData.instance;
-
-    for (final doctor in appData.doctors) {
-      if (doctor.name == appData.currentDoctorName) {
-        return doctor;
-      }
-    }
-
-    return appData.doctors.first;
-  }
-
   void openScreen(
     BuildContext context,
     Widget screen,
@@ -40,13 +28,55 @@ class DoctorHome extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final appData = AppData.instance;
-    final doctor = getCurrentDoctor();
 
     return Scaffold(
       body: SafeArea(
         child: AnimatedBuilder(
           animation: appData,
           builder: (context, child) {
+            if (appData.isLoadingDoctors) {
+              return const Center(
+                child: CircularProgressIndicator(),
+              );
+            }
+
+            if (appData.doctorLoadError != null) {
+              return Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        appData.doctorLoadError!,
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 12),
+                      ElevatedButton.icon(
+                        onPressed: appData.refreshDoctors,
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('Try Again'),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }
+
+            final doctor = appData.currentDoctor;
+
+            if (doctor == null) {
+              return const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(24),
+                  child: Text(
+                    'Your doctor profile was not found. Please contact the admin.',
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              );
+            }
+
             final appointments = appData.appointments.where((appointment) {
               return appointment.doctorId == doctor.id;
             }).toList();
@@ -59,43 +89,46 @@ class DoctorHome extends StatelessWidget {
               return appointment.status == 'Completed';
             }).length;
 
-            return ListView(
-              padding: const EdgeInsets.all(18),
-              children: [
-                buildHeader(doctor),
-                const SizedBox(height: 22),
-                buildStatistics(
-                  totalAppointments: appointments.length,
-                  pendingAppointments: pendingCount,
-                  completedAppointments: completedCount,
-                ),
-                const SizedBox(height: 26),
-                const Text(
-                  'Doctor Services',
-                  style: TextStyle(
-                    fontSize: 19,
-                    fontWeight: FontWeight.bold,
+            return RefreshIndicator(
+              onRefresh: appData.refreshDoctors,
+              child: ListView(
+                padding: const EdgeInsets.all(18),
+                children: [
+                  buildHeader(doctor),
+                  const SizedBox(height: 22),
+                  buildStatistics(
+                    totalAppointments: appointments.length,
+                    pendingAppointments: pendingCount,
+                    completedAppointments: completedCount,
                   ),
-                ),
-                const SizedBox(height: 12),
-                buildServiceGrid(
-                  context,
-                  doctor,
-                ),
-                const SizedBox(height: 26),
-                const Text(
-                  'Upcoming Appointments',
-                  style: TextStyle(
-                    fontSize: 19,
-                    fontWeight: FontWeight.bold,
+                  const SizedBox(height: 26),
+                  const Text(
+                    'Doctor Services',
+                    style: TextStyle(
+                      fontSize: 19,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 12),
-                buildUpcomingAppointments(
-                  context,
-                  appointments,
-                ),
-              ],
+                  const SizedBox(height: 12),
+                  buildServiceGrid(
+                    context,
+                    doctor,
+                  ),
+                  const SizedBox(height: 26),
+                  const Text(
+                    'Upcoming Appointments',
+                    style: TextStyle(
+                      fontSize: 19,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  buildUpcomingAppointments(
+                    context,
+                    appointments,
+                  ),
+                ],
+              ),
             );
           },
         ),

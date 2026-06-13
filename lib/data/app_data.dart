@@ -1,3 +1,7 @@
+import 'dart:async';
+
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 String formatDate(DateTime date) {
@@ -20,6 +24,7 @@ class DoctorModel {
     required this.queueLength,
     this.reviews = 0,
     this.approved = true,
+    this.available = true,
     this.isFavorite = false,
   });
 
@@ -33,7 +38,76 @@ class DoctorModel {
   List<String> availableSlots;
   int queueLength;
   bool approved;
+  bool available;
   bool isFavorite;
+
+  static double _readDouble(dynamic value, [double fallback = 0]) {
+    if (value is num) {
+      return value.toDouble();
+    }
+
+    return double.tryParse(value?.toString() ?? '') ?? fallback;
+  }
+
+  static int _readInt(dynamic value, [int fallback = 0]) {
+    if (value is num) {
+      return value.toInt();
+    }
+
+    return int.tryParse(value?.toString() ?? '') ?? fallback;
+  }
+
+  static List<String> _readStringList(dynamic value) {
+    if (value is! List) {
+      return <String>[];
+    }
+
+    return value
+        .map((item) => item.toString().trim())
+        .where((item) => item.isNotEmpty)
+        .toList();
+  }
+
+  factory DoctorModel.fromFirestore(
+    QueryDocumentSnapshot<Map<String, dynamic>> document,
+  ) {
+    final data = document.data();
+
+    return DoctorModel(
+      id: document.id,
+      name: (data['name'] ?? 'Unnamed Doctor').toString(),
+      specialty:
+          (data['specialty'] ?? data['designation'] ?? 'Not set').toString(),
+      rating: _readDouble(data['rating'], 0),
+      experience: _readInt(
+        data['experienceYears'] ?? data['experience'],
+      ),
+      reviews: _readInt(data['reviews'] ?? data['ratingCount']),
+      availableSlots: _readStringList(data['availableSlots']),
+      queueLength: _readInt(data['queueLength']),
+      approved: data['approved'] == true,
+      available: data['available'] != false,
+    );
+  }
+
+  void updateFromFirestore(Map<String, dynamic> data) {
+    name = (data['name'] ?? name).toString();
+    specialty =
+        (data['specialty'] ?? data['designation'] ?? specialty).toString();
+    rating = _readDouble(data['rating'], rating);
+    experience = _readInt(
+      data['experienceYears'] ?? data['experience'],
+      experience,
+    );
+    reviews = _readInt(
+      data['reviews'] ?? data['ratingCount'],
+      reviews,
+    );
+    availableSlots = _readStringList(data['availableSlots']);
+    queueLength = _readInt(data['queueLength'], queueLength);
+    approved = data['approved'] == true;
+    available = data['available'] != false;
+  }
 }
 
 // ==================== APPOINTMENT MODEL ====================
@@ -200,74 +274,167 @@ class NotificationModel {
 // ==================== MAIN APP DATA ====================
 
 class AppData extends ChangeNotifier {
-  AppData._();
+  AppData._() {
+    _authSubscription = FirebaseAuth.instance.authStateChanges().listen(
+          _handleAuthenticationChanged,
+        );
+  }
 
   static final AppData instance = AppData._();
 
-  final String currentPatientName = 'Demo Patient';
-  final String currentDoctorName = 'Dr. Sarah Ahmed';
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+
+  StreamSubscription<User?>? _authSubscription;
+  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>?
+      _currentUserSubscription;
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _doctorSubscription;
+
+  final Set<String> _favoriteDoctorIds = <String>{};
+
+  String currentUserId = '';
+  String currentUserRole = '';
+  String currentPatientName = 'Patient';
+  String currentDoctorName = 'Doctor';
+  bool isLoadingDoctors = true;
+  String? doctorLoadError;
 
   // ==================== DOCTORS ====================
 
-  final List<DoctorModel> doctors = [
-    DoctorModel(
-      id: 'doctor_1',
-      name: 'Dr. Sarah Ahmed',
-      specialty: 'General Medicine',
-      rating: 4.8,
-      reviews: 120,
-      experience: 8,
-      availableSlots: [
-        '09:00 AM',
-        '10:00 AM',
-        '11:30 AM',
-        '03:00 PM',
-      ],
-      queueLength: 3,
-    ),
-    DoctorModel(
-      id: 'doctor_2',
-      name: 'Dr. Rakib Hasan',
-      specialty: 'Cardiology',
-      rating: 4.7,
-      reviews: 90,
-      experience: 10,
-      availableSlots: [
-        '10:30 AM',
-        '12:00 PM',
-        '04:00 PM',
-      ],
-      queueLength: 5,
-    ),
-    DoctorModel(
-      id: 'doctor_3',
-      name: 'Dr. Nabila Rahman',
-      specialty: 'Dermatology',
-      rating: 4.6,
-      reviews: 75,
-      experience: 6,
-      availableSlots: [
-        '09:30 AM',
-        '01:30 PM',
-        '05:00 PM',
-      ],
-      queueLength: 2,
-    ),
-    DoctorModel(
-      id: 'doctor_4',
-      name: 'Dr. Farhan Kabir',
-      specialty: 'Orthopedics',
-      rating: 4.5,
-      reviews: 65,
-      experience: 7,
-      availableSlots: [
-        '11:00 AM',
-        '02:00 PM',
-      ],
-      queueLength: 4,
-      approved: false,
-    ),
-  ];
+  final List<DoctorModel> doctors = <DoctorModel>[];
+
+  DoctorModel? get currentDoctor {
+    if (currentUserId.isEmpty) {
+      return null;
+    }
+
+    for (final doctor in doctors) {
+      if (doctor.id == currentUserId) {
+        return doctor;
+      }
+    }
+
+    return null;
+  }
+
+  Future<void> _handleAuthenticationChanged(User? user) async {
+    await _currentUserSubscription?.cancel();
+    await _doctorSubscription?.cancel();
+    _currentUserSubscription = null;
+    _doctorSubscription = null;
+
+    if (user == null) {
+      currentUserId = '';
+      currentUserRole = '';
+      currentPatientName = 'Patient';
+      currentDoctorName = 'Doctor';
+      doctors.clear();
+      isLoadingDoctors = false;
+      doctorLoadError = null;
+      notifyListeners();
+      return;
+    }
+
+    currentUserId = user.uid;
+
+    _currentUserSubscription =
+        _firestore.collection('users').doc(user.uid).snapshots().listen(
+      (snapshot) {
+        final data = snapshot.data();
+
+        if (data == null) {
+          return;
+        }
+
+        final name = (data['name'] ?? user.displayName ?? '').toString().trim();
+        currentUserRole = (data['role'] ?? '').toString();
+
+        if (currentUserRole == 'doctor') {
+          currentDoctorName = name.isEmpty ? 'Doctor' : name;
+        } else if (currentUserRole == 'patient') {
+          currentPatientName = name.isEmpty ? 'Patient' : name;
+        }
+
+        notifyListeners();
+      },
+      onError: (_) {
+        currentUserRole = '';
+        notifyListeners();
+      },
+    );
+
+    _startDoctorListener();
+  }
+
+  void _startDoctorListener() {
+    if (_doctorSubscription != null) {
+      return;
+    }
+
+    isLoadingDoctors = true;
+    doctorLoadError = null;
+    notifyListeners();
+
+    _doctorSubscription = _firestore.collection('doctors').snapshots().listen(
+      _applyDoctorSnapshot,
+      onError: (Object error) {
+        isLoadingDoctors = false;
+        doctorLoadError = 'Unable to load doctors. Please try again.';
+        notifyListeners();
+      },
+    );
+  }
+
+  void _applyDoctorSnapshot(
+    QuerySnapshot<Map<String, dynamic>> snapshot,
+  ) {
+    final existingDoctors = <String, DoctorModel>{
+      for (final doctor in doctors) doctor.id: doctor,
+    };
+
+    final updatedDoctors = <DoctorModel>[];
+
+    for (final document in snapshot.docs) {
+      final existingDoctor = existingDoctors[document.id];
+
+      if (existingDoctor == null) {
+        final doctor = DoctorModel.fromFirestore(document);
+        doctor.isFavorite = _favoriteDoctorIds.contains(doctor.id);
+        updatedDoctors.add(doctor);
+      } else {
+        existingDoctor.updateFromFirestore(document.data());
+        existingDoctor.isFavorite =
+            _favoriteDoctorIds.contains(existingDoctor.id);
+        updatedDoctors.add(existingDoctor);
+      }
+    }
+
+    updatedDoctors.sort((first, second) {
+      return first.name.toLowerCase().compareTo(second.name.toLowerCase());
+    });
+
+    doctors
+      ..clear()
+      ..addAll(updatedDoctors);
+
+    isLoadingDoctors = false;
+    doctorLoadError = null;
+    notifyListeners();
+  }
+
+  Future<void> refreshDoctors() async {
+    isLoadingDoctors = true;
+    doctorLoadError = null;
+    notifyListeners();
+
+    try {
+      final snapshot = await _firestore.collection('doctors').get();
+      _applyDoctorSnapshot(snapshot);
+    } catch (_) {
+      isLoadingDoctors = false;
+      doctorLoadError = 'Unable to refresh doctors. Please try again.';
+      notifyListeners();
+    }
+  }
 
   // ==================== APPOINTMENTS ====================
 
@@ -424,7 +591,7 @@ class AppData extends ChangeNotifier {
 
   List<DoctorModel> get approvedDoctors {
     return doctors.where((doctor) {
-      return doctor.approved;
+      return doctor.approved && doctor.available;
     }).toList();
   }
 
@@ -535,6 +702,12 @@ class AppData extends ChangeNotifier {
     });
 
     doctor.isFavorite = !doctor.isFavorite;
+
+    if (doctor.isFavorite) {
+      _favoriteDoctorIds.add(doctorId);
+    } else {
+      _favoriteDoctorIds.remove(doctorId);
+    }
 
     notifyListeners();
   }
@@ -754,52 +927,128 @@ class AppData extends ChangeNotifier {
 
   // ==================== DOCTOR AVAILABILITY ====================
 
-  void addAvailability(
+  Future<void> addAvailability(
     String doctorId,
     String time,
-  ) {
+  ) async {
+    final normalizedTime = time.trim();
+
+    if (normalizedTime.isEmpty) {
+      return;
+    }
+
     final doctor = doctors.firstWhere((doctor) {
       return doctor.id == doctorId;
     });
 
-    if (!doctor.availableSlots.contains(time)) {
-      doctor.availableSlots.add(time);
+    if (doctor.availableSlots.contains(normalizedTime)) {
+      return;
+    }
+
+    doctor.availableSlots.add(normalizedTime);
+    doctor.availableSlots.sort();
+    notifyListeners();
+
+    try {
+      await _firestore.collection('doctors').doc(doctorId).update({
+        'availableSlots': FieldValue.arrayUnion(<String>[normalizedTime]),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    } catch (_) {
+      doctor.availableSlots.remove(normalizedTime);
+      notifyListeners();
+      rethrow;
+    }
+  }
+
+  Future<void> removeAvailability(
+    String doctorId,
+    String time,
+  ) async {
+    final doctor = doctors.firstWhere((doctor) {
+      return doctor.id == doctorId;
+    });
+
+    final hadSlot = doctor.availableSlots.remove(time);
+
+    if (!hadSlot) {
+      return;
     }
 
     notifyListeners();
-  }
 
-  void removeAvailability(
-    String doctorId,
-    String time,
-  ) {
-    final doctor = doctors.firstWhere((doctor) {
-      return doctor.id == doctorId;
-    });
-
-    doctor.availableSlots.remove(time);
-
-    notifyListeners();
+    try {
+      await _firestore.collection('doctors').doc(doctorId).update({
+        'availableSlots': FieldValue.arrayRemove(<String>[time]),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    } catch (_) {
+      doctor.availableSlots.add(time);
+      doctor.availableSlots.sort();
+      notifyListeners();
+      rethrow;
+    }
   }
 
   // ==================== ADMIN DOCTOR MANAGEMENT ====================
 
-  void toggleDoctorApproval(String doctorId) {
+  Future<bool> toggleDoctorApproval(String doctorId) async {
     final doctor = doctors.firstWhere((doctor) {
       return doctor.id == doctorId;
     });
 
-    doctor.approved = !doctor.approved;
+    final previousValue = doctor.approved;
+    final newValue = !previousValue;
 
+    doctor.approved = newValue;
     notifyListeners();
+
+    try {
+      final batch = _firestore.batch();
+      final doctorReference = _firestore.collection('doctors').doc(doctorId);
+      final userReference = _firestore.collection('users').doc(doctorId);
+
+      batch.update(doctorReference, {
+        'approved': newValue,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+      batch.update(userReference, {
+        'approved': newValue,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+      await batch.commit();
+      return newValue;
+    } catch (_) {
+      doctor.approved = previousValue;
+      notifyListeners();
+      rethrow;
+    }
   }
 
-  void removeDoctor(String doctorId) {
-    doctors.removeWhere((doctor) {
+  Future<void> removeDoctor(String doctorId) async {
+    final doctorIndex = doctors.indexWhere((doctor) {
       return doctor.id == doctorId;
     });
 
+    if (doctorIndex == -1) {
+      return;
+    }
+
+    final removedDoctor = doctors.removeAt(doctorIndex);
     notifyListeners();
+
+    try {
+      final batch = _firestore.batch();
+      batch.delete(_firestore.collection('doctors').doc(doctorId));
+      batch.delete(_firestore.collection('users').doc(doctorId));
+      await batch.commit();
+    } catch (_) {
+      doctors.insert(doctorIndex, removedDoctor);
+      notifyListeners();
+      rethrow;
+    }
   }
 
   // ==================== ADMIN ANNOUNCEMENT ====================
@@ -844,5 +1093,13 @@ class AppData extends ChangeNotifier {
     notification.read = true;
 
     notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _authSubscription?.cancel();
+    _currentUserSubscription?.cancel();
+    _doctorSubscription?.cancel();
+    super.dispose();
   }
 }

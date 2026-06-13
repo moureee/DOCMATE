@@ -111,9 +111,7 @@ class _PatientHomeState extends State<PatientHome> {
           animation: appData,
           builder: (context, child) {
             return RefreshIndicator(
-              onRefresh: () async {
-                setState(() {});
-              },
+              onRefresh: appData.refreshDoctors,
               child: ListView(
                 padding: const EdgeInsets.all(18),
                 children: [
@@ -376,6 +374,50 @@ class _PatientHomeState extends State<PatientHome> {
   }
 
   Widget buildDoctorList() {
+    final appData = AppData.instance;
+
+    if (appData.isLoadingDoctors) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 28),
+        child: Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+
+    if (appData.doctorLoadError != null) {
+      return Container(
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: Colors.grey.shade300,
+          ),
+        ),
+        child: Column(
+          children: [
+            const Icon(
+              Icons.cloud_off_outlined,
+              size: 42,
+              color: Colors.black54,
+            ),
+            const SizedBox(height: 10),
+            Text(
+              appData.doctorLoadError!,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 12),
+            ElevatedButton.icon(
+              onPressed: appData.refreshDoctors,
+              icon: const Icon(Icons.refresh),
+              label: const Text('Try Again'),
+            ),
+          ],
+        ),
+      );
+    }
+
     final doctors = filteredDoctors();
 
     if (doctors.isEmpty) {
