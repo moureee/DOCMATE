@@ -315,7 +315,7 @@ class DoctorHome extends StatelessWidget {
             doctor: doctor,
           ),
         ),
-        buildAverageTimeCard(),
+        buildAverageTimeCard(doctor),
       ],
     );
   }
@@ -367,25 +367,25 @@ class DoctorHome extends StatelessWidget {
     );
   }
 
-  Widget buildAverageTimeCard() {
+  Widget buildAverageTimeCard(DoctorModel doctor) {
     return Container(
       padding: const EdgeInsets.all(15),
       decoration: BoxDecoration(
         color: AppColors.dark,
         borderRadius: BorderRadius.circular(20),
       ),
-      child: const Column(
+      child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          CircleAvatar(
+          const CircleAvatar(
             backgroundColor: AppColors.primary,
             child: Icon(
               Icons.timer_outlined,
               color: AppColors.dark,
             ),
           ),
-          SizedBox(height: 9),
-          Text(
+          const SizedBox(height: 9),
+          const Text(
             'Average Time',
             textAlign: TextAlign.center,
             style: TextStyle(
@@ -393,10 +393,10 @@ class DoctorHome extends StatelessWidget {
               fontWeight: FontWeight.bold,
             ),
           ),
-          SizedBox(height: 4),
+          const SizedBox(height: 4),
           Text(
-            '12 minutes',
-            style: TextStyle(
+            '${doctor.averageConsultationMinutes} minutes',
+            style: const TextStyle(
               color: Colors.white70,
             ),
           ),

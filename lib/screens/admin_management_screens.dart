@@ -18,51 +18,49 @@ class AdminPatientsScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Manage Patients'),
       ),
-      body: ListView.builder(
-        padding: const EdgeInsets.all(18),
-        itemCount: appData.patients.length,
-        itemBuilder: (context, index) {
-          final patient = appData.patients[index];
+      body: AnimatedBuilder(
+        animation: appData,
+        builder: (context, child) {
+          if (appData.patients.isEmpty) {
+            return const Center(
+              child: Text('No patients found.'),
+            );
+          }
 
-          final appointmentCount = appData.appointments.where(
-            (appointment) {
-              return appointment.patientName == patient;
+          return ListView.builder(
+            padding: const EdgeInsets.all(18),
+            itemCount: appData.patients.length,
+            itemBuilder: (context, index) {
+              final patient = appData.patients[index];
+              final appointmentCount = appData.appointments
+                  .where(
+                    (appointment) => appointment.patientName == patient,
+                  )
+                  .length;
+
+              return Container(
+                margin: const EdgeInsets.only(bottom: 12),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: Colors.grey.shade300),
+                ),
+                child: ListTile(
+                  leading: const CircleAvatar(
+                    backgroundColor: AppColors.lightMint,
+                    child: Icon(
+                      Icons.person,
+                      color: AppColors.primaryDark,
+                    ),
+                  ),
+                  title: Text(
+                    patient,
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  subtitle: Text('$appointmentCount appointment(s)'),
+                ),
+              );
             },
-          ).length;
-
-          return Container(
-            margin: const EdgeInsets.only(bottom: 12),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(
-                color: Colors.grey.shade300,
-              ),
-            ),
-            child: ListTile(
-              leading: const CircleAvatar(
-                backgroundColor: AppColors.lightMint,
-                child: Icon(
-                  Icons.person,
-                  color: AppColors.primaryDark,
-                ),
-              ),
-              title: Text(
-                patient,
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              subtitle: Text(
-                '$appointmentCount appointment(s)',
-              ),
-              trailing: Text(
-                'P${1001 + index}',
-                style: const TextStyle(
-                  color: Colors.black54,
-                ),
-              ),
-            ),
           );
         },
       ),
@@ -278,7 +276,7 @@ class _AdminAnnouncementsScreenState extends State<AdminAnnouncementsScreen> {
     super.dispose();
   }
 
-  void sendAnnouncement() {
+  Future<void> sendAnnouncement() async {
     final message = messageController.text.trim();
 
     if (message.isEmpty) {
@@ -292,17 +290,23 @@ class _AdminAnnouncementsScreenState extends State<AdminAnnouncementsScreen> {
       return;
     }
 
-    AppData.instance.sendAnnouncement(message);
-
-    messageController.clear();
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text(
-          'Announcement sent successfully.',
+    try {
+      await AppData.instance.sendAnnouncement(message);
+      messageController.clear();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Announcement sent successfully.'),
         ),
-      ),
-    );
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Announcement could not be sent.'),
+        ),
+      );
+    }
   }
 
   @override

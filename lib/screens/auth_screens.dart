@@ -54,7 +54,8 @@ Future<void> createUserRecords({
     'phone': phone,
     'role': role,
     'loginMethod': loginMethod,
-    'createdAt': DateTime.now(),
+    'isActive': true,
+    'createdAt': FieldValue.serverTimestamp(),
     if (role == 'doctor') 'specialty': specialty,
     if (role == 'doctor') 'designation': specialty,
     if (role == 'doctor') 'approved': false,
@@ -70,7 +71,8 @@ Future<void> createUserRecords({
       'weight': '',
       'allergies': '',
       'bloodGroup': '',
-      'createdAt': DateTime.now(),
+      'doctorIds': <String>[],
+      'createdAt': FieldValue.serverTimestamp(),
     });
   }
 
@@ -82,10 +84,14 @@ Future<void> createUserRecords({
       'phone': phone,
       'specialty': specialty,
       'designation': specialty,
-      'rating': 4.5,
+      'rating': 0.0,
+      'ratingAverage': 0.0,
+      'ratingCount': 0,
       'available': true,
+      'availableSlots': <String>[],
+      'averageConsultationMinutes': 12,
       'approved': false,
-      'createdAt': DateTime.now(),
+      'createdAt': FieldValue.serverTimestamp(),
     });
   }
 }

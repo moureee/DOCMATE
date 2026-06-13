@@ -98,7 +98,7 @@ class DoctorInsightsScreen extends StatelessWidget {
               ),
               buildInsightCard(
                 title: 'Average Time',
-                value: '12 min',
+                value: '${doctor.averageConsultationMinutes} min',
                 icon: Icons.timer_outlined,
               ),
               buildInsightCard(

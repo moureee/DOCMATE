@@ -19,17 +19,10 @@ class PrescriptionManagementScreen extends StatefulWidget {
 class _PrescriptionManagementScreenState
     extends State<PrescriptionManagementScreen> {
   final TextEditingController medicineController = TextEditingController();
-
   final TextEditingController notesController = TextEditingController();
 
-  late String selectedPatient;
-
-  @override
-  void initState() {
-    super.initState();
-
-    selectedPatient = AppData.instance.patients.first;
-  }
+  String? selectedPatient;
+  bool isSaving = false;
 
   @override
   void dispose() {
@@ -38,40 +31,57 @@ class _PrescriptionManagementScreenState
     super.dispose();
   }
 
-  void savePrescription() {
+  Future<void> savePrescription() async {
     final medicineText = medicineController.text.trim();
 
-    if (medicineText.isEmpty) {
-      showMessage(
-        'Please enter at least one medicine.',
-      );
+    if (selectedPatient == null || selectedPatient!.isEmpty) {
+      showMessage('No connected patient is available.');
       return;
     }
 
-    final medicines = medicineText.split(',').map((medicine) {
-      return medicine.trim();
-    }).where((medicine) {
-      return medicine.isNotEmpty;
-    }).toList();
+    if (medicineText.isEmpty) {
+      showMessage('Please enter at least one medicine.');
+      return;
+    }
 
-    AppData.instance.addPrescription(
-      patientName: selectedPatient,
-      doctorName: widget.doctorName,
-      medicines: medicines,
-      notes: notesController.text.trim(),
-    );
+    final medicines = medicineText
+        .split(',')
+        .map((medicine) => medicine.trim())
+        .where((medicine) => medicine.isNotEmpty)
+        .toList();
 
-    medicineController.clear();
-    notesController.clear();
+    setState(() {
+      isSaving = true;
+    });
 
-    showMessage('Prescription saved successfully.');
+    try {
+      await AppData.instance.addPrescription(
+        patientName: selectedPatient!,
+        doctorName: widget.doctorName,
+        medicines: medicines,
+        notes: notesController.text.trim(),
+      );
+
+      medicineController.clear();
+      notesController.clear();
+
+      if (!mounted) return;
+      showMessage('Prescription saved successfully.');
+    } catch (error) {
+      if (!mounted) return;
+      showMessage(error.toString().replaceFirst('Bad state: ', ''));
+    } finally {
+      if (mounted) {
+        setState(() {
+          isSaving = false;
+        });
+      }
+    }
   }
 
   void showMessage(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-      ),
+      SnackBar(content: Text(message)),
     );
   }
 
@@ -86,9 +96,17 @@ class _PrescriptionManagementScreenState
       body: AnimatedBuilder(
         animation: appData,
         builder: (context, child) {
+          if (selectedPatient != null &&
+              !appData.patients.contains(selectedPatient)) {
+            selectedPatient = null;
+          }
+          selectedPatient ??=
+              appData.patients.isEmpty ? null : appData.patients.first;
+
           final doctorPrescriptions = appData.prescriptions.where(
             (prescription) {
-              return prescription.doctorName == widget.doctorName;
+              return prescription.doctorId == appData.currentUserId ||
+                  prescription.doctorName == widget.doctorName;
             },
           ).toList();
 
@@ -108,9 +126,7 @@ class _PrescriptionManagementScreenState
               if (doctorPrescriptions.isEmpty)
                 buildEmptyMessage()
               else
-                ...doctorPrescriptions.map(
-                  buildPrescriptionCard,
-                ),
+                ...doctorPrescriptions.map(buildPrescriptionCard),
             ],
           );
         },
@@ -119,6 +135,8 @@ class _PrescriptionManagementScreenState
   }
 
   Widget buildPrescriptionForm(AppData appData) {
+    final hasPatients = appData.patients.isNotEmpty;
+
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
@@ -136,29 +154,42 @@ class _PrescriptionManagementScreenState
             ),
           ),
           const SizedBox(height: 16),
-          DropdownButtonFormField<String>(
-            initialValue: selectedPatient,
-            decoration: const InputDecoration(
-              labelText: 'Select Patient',
-              prefixIcon: Icon(Icons.person),
-            ),
-            items: appData.patients.map((patient) {
-              return DropdownMenuItem<String>(
-                value: patient,
-                child: Text(patient),
-              );
-            }).toList(),
-            onChanged: (value) {
-              if (value != null) {
+          if (!hasPatients)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: const Text(
+                'Patients appear here after they book an appointment with you.',
+                textAlign: TextAlign.center,
+              ),
+            )
+          else
+            DropdownButtonFormField<String>(
+              initialValue: selectedPatient,
+              decoration: const InputDecoration(
+                labelText: 'Select Patient',
+                prefixIcon: Icon(Icons.person),
+              ),
+              items: appData.patients.map((patient) {
+                return DropdownMenuItem<String>(
+                  value: patient,
+                  child: Text(patient),
+                );
+              }).toList(),
+              onChanged: (value) {
                 setState(() {
                   selectedPatient = value;
                 });
-              }
-            },
-          ),
+              },
+            ),
           const SizedBox(height: 14),
           TextField(
             controller: medicineController,
+            enabled: hasPatients,
             maxLines: 3,
             decoration: const InputDecoration(
               labelText: 'Medicines',
@@ -169,6 +200,7 @@ class _PrescriptionManagementScreenState
           const SizedBox(height: 14),
           TextField(
             controller: notesController,
+            enabled: hasPatients,
             maxLines: 3,
             decoration: const InputDecoration(
               labelText: 'Doctor Notes',
@@ -180,9 +212,17 @@ class _PrescriptionManagementScreenState
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
-              onPressed: savePrescription,
-              icon: const Icon(Icons.save),
-              label: const Text('Save Prescription'),
+              onPressed: !hasPatients || isSaving ? null : savePrescription,
+              icon: isSaving
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.save),
+              label: Text(
+                isSaving ? 'Saving...' : 'Save Prescription',
+              ),
             ),
           ),
         ],
@@ -190,18 +230,14 @@ class _PrescriptionManagementScreenState
     );
   }
 
-  Widget buildPrescriptionCard(
-    PrescriptionModel prescription,
-  ) {
+  Widget buildPrescriptionCard(PrescriptionModel prescription) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: Colors.grey.shade300,
-        ),
+        border: Border.all(color: Colors.grey.shade300),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -222,15 +258,11 @@ class _PrescriptionManagementScreenState
                   children: [
                     Text(
                       prescription.patientName,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                      ),
+                      style: const TextStyle(fontWeight: FontWeight.bold),
                     ),
                     Text(
                       formatDate(prescription.date),
-                      style: const TextStyle(
-                        color: Colors.black54,
-                      ),
+                      style: const TextStyle(color: Colors.black54),
                     ),
                   ],
                 ),
@@ -240,17 +272,13 @@ class _PrescriptionManagementScreenState
           const Divider(height: 25),
           Text(
             prescription.medicines.join(', '),
-            style: const TextStyle(
-              fontWeight: FontWeight.w500,
-            ),
+            style: const TextStyle(fontWeight: FontWeight.w500),
           ),
           if (prescription.notes.isNotEmpty) ...[
             const SizedBox(height: 8),
             Text(
               prescription.notes,
-              style: const TextStyle(
-                color: Colors.black54,
-              ),
+              style: const TextStyle(color: Colors.black54),
             ),
           ],
         ],
@@ -264,14 +292,10 @@ class _PrescriptionManagementScreenState
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: Colors.grey.shade300,
-        ),
+        border: Border.all(color: Colors.grey.shade300),
       ),
       child: const Center(
-        child: Text(
-          'No prescriptions created yet.',
-        ),
+        child: Text('No prescriptions created yet.'),
       ),
     );
   }

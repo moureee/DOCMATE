@@ -13,42 +13,55 @@ class DoctorPatientInfoScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final appointments = AppData.instance.appointments.where(
-      (appointment) {
-        return appointment.doctorId == doctor.id;
-      },
-    ).toList();
-
-    final patientNames = appointments
-        .map((appointment) => appointment.patientName)
-        .toSet()
-        .toList();
+    final appData = AppData.instance;
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Patient Information'),
       ),
-      body: patientNames.isEmpty
-          ? const Center(
+      body: AnimatedBuilder(
+        animation: appData,
+        builder: (context, child) {
+          final appointments = appData.appointments.where(
+            (appointment) {
+              return appointment.doctorId == doctor.id;
+            },
+          ).toList();
+
+          appointments.sort((first, second) {
+            return first.date.compareTo(second.date);
+          });
+
+          final patientNames = appointments
+              .map((appointment) => appointment.patientName)
+              .toSet()
+              .toList()
+            ..sort();
+
+          if (patientNames.isEmpty) {
+            return const Center(
               child: Text('No patient information found.'),
-            )
-          : ListView.builder(
-              padding: const EdgeInsets.all(18),
-              itemCount: patientNames.length,
-              itemBuilder: (context, index) {
-                final patientName = patientNames[index];
+            );
+          }
 
-                final patientAppointments = appointments.where((appointment) {
-                  return appointment.patientName == patientName;
-                }).toList();
+          return ListView.builder(
+            padding: const EdgeInsets.all(18),
+            itemCount: patientNames.length,
+            itemBuilder: (context, index) {
+              final patientName = patientNames[index];
+              final patientAppointments = appointments.where((appointment) {
+                return appointment.patientName == patientName;
+              }).toList();
 
-                return buildPatientCard(
-                  context,
-                  patientName,
-                  patientAppointments,
-                );
-              },
-            ),
+              return buildPatientCard(
+                context,
+                patientName,
+                patientAppointments,
+              );
+            },
+          );
+        },
+      ),
     );
   }
 
@@ -142,7 +155,7 @@ class DoctorPatientInfoScreen extends StatelessWidget {
     List<AppointmentModel> appointments,
   ) {
     final appData = AppData.instance;
-    final isCurrentPatient = patientName == appData.currentPatientName;
+    final profile = appData.healthProfileForPatient(patientName);
 
     showModalBottomSheet<void>(
       context: context,
@@ -190,26 +203,30 @@ class DoctorPatientInfoScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 22),
-              if (isCurrentPatient) ...[
+              if (profile != null) ...[
                 buildDetailCard(
                   'BMI',
-                  '${appData.healthProfile.bmi.toStringAsFixed(1)} '
-                      '(${appData.healthProfile.bmiCategory})',
+                  profile.bmi == 0
+                      ? 'Not available'
+                      : '${profile.bmi.toStringAsFixed(1)} '
+                          '(${profile.bmiCategory})',
                 ),
                 buildDetailCard(
                   'Blood Group',
-                  appData.healthProfile.bloodGroup,
+                  profile.bloodGroup.isEmpty
+                      ? 'Not recorded'
+                      : profile.bloodGroup,
                 ),
                 buildDetailCard(
                   'Allergies',
-                  appData.healthProfile.allergies.isEmpty
+                  profile.allergies.isEmpty
                       ? 'No allergies recorded'
-                      : appData.healthProfile.allergies.join(', '),
+                      : profile.allergies.join(', '),
                 ),
               ] else ...[
                 buildDetailCard(
                   'Health Profile',
-                  'Detailed profile not entered yet.',
+                  'The patient has not shared a health profile yet.',
                 ),
               ],
               const SizedBox(height: 14),

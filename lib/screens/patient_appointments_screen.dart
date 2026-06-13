@@ -18,7 +18,8 @@ class PatientAppointmentsScreen extends StatelessWidget {
         animation: appData,
         builder: (context, child) {
           final appointments = appData.appointments.where((appointment) {
-            return appointment.patientName == appData.currentPatientName;
+            return appointment.patientId == appData.currentUserId ||
+                appointment.patientName == appData.currentPatientName;
           }).toList();
 
           appointments.sort(
@@ -169,6 +170,19 @@ class PatientAppointmentsScreen extends StatelessWidget {
               ],
             ),
           ],
+          if (appointment.status == 'Completed') ...[
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () {
+                  showReviewDialog(context, appointment);
+                },
+                icon: const Icon(Icons.star_outline),
+                label: const Text('Rate Doctor'),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -214,9 +228,22 @@ class PatientAppointmentsScreen extends StatelessWidget {
     );
 
     if (shouldCancel == true) {
-      AppData.instance.cancelAppointment(
-        appointment.id,
-      );
+      try {
+        await AppData.instance.cancelAppointment(appointment.id);
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Appointment cancelled.')),
+        );
+      } catch (error) {
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              error.toString().replaceFirst('Bad state: ', ''),
+            ),
+          ),
+        );
+      }
     }
   }
 
@@ -286,11 +313,140 @@ class PatientAppointmentsScreen extends StatelessWidget {
 
     if (selectedTime == null) return;
 
-    AppData.instance.rescheduleAppointment(
-      appointmentId: appointment.id,
-      date: selectedDate,
-      time: selectedTime,
+    try {
+      await AppData.instance.rescheduleAppointment(
+        appointmentId: appointment.id,
+        date: selectedDate,
+        time: selectedTime,
+      );
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Appointment rescheduled.')),
+      );
+    } catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            error.toString().replaceFirst('Bad state: ', ''),
+          ),
+        ),
+      );
+    }
+  }
+
+  Future<void> showReviewDialog(
+    BuildContext context,
+    AppointmentModel appointment,
+  ) async {
+    final commentController = TextEditingController();
+    var rating = 5;
+    var isSaving = false;
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: Text('Rate ${appointment.doctorName}'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: List.generate(5, (index) {
+                      final starValue = index + 1;
+                      return IconButton(
+                        onPressed: isSaving
+                            ? null
+                            : () {
+                                setDialogState(() {
+                                  rating = starValue;
+                                });
+                              },
+                        icon: Icon(
+                          starValue <= rating ? Icons.star : Icons.star_border,
+                          color: Colors.amber,
+                        ),
+                      );
+                    }),
+                  ),
+                  TextField(
+                    controller: commentController,
+                    enabled: !isSaving,
+                    maxLines: 3,
+                    decoration: const InputDecoration(
+                      labelText: 'Comment (optional)',
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isSaving
+                      ? null
+                      : () {
+                          Navigator.pop(dialogContext);
+                        },
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: isSaving
+                      ? null
+                      : () async {
+                          setDialogState(() {
+                            isSaving = true;
+                          });
+                          try {
+                            await AppData.instance.addReview(
+                              appointment: appointment,
+                              rating: rating,
+                              comment: commentController.text,
+                            );
+                            if (dialogContext.mounted) {
+                              Navigator.pop(dialogContext);
+                            }
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Review submitted.'),
+                                ),
+                              );
+                            }
+                          } catch (error) {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    error
+                                        .toString()
+                                        .replaceFirst('Bad state: ', ''),
+                                  ),
+                                ),
+                              );
+                            }
+                            setDialogState(() {
+                              isSaving = false;
+                            });
+                          }
+                        },
+                  child: isSaving
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('Submit'),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
+
+    commentController.dispose();
   }
 
   Widget buildInformationRow(

@@ -6,22 +6,14 @@ import '../data/app_data.dart';
 class DoctorAppointmentsScreen extends StatelessWidget {
   const DoctorAppointmentsScreen({super.key});
 
-  DoctorModel getCurrentDoctor() {
+  DoctorModel? getCurrentDoctor() {
     final appData = AppData.instance;
-
-    for (final doctor in appData.doctors) {
-      if (doctor.name == appData.currentDoctorName) {
-        return doctor;
-      }
-    }
-
-    return appData.doctors.first;
+    return appData.currentDoctor;
   }
 
   @override
   Widget build(BuildContext context) {
     final appData = AppData.instance;
-    final doctor = getCurrentDoctor();
 
     return Scaffold(
       appBar: AppBar(
@@ -30,6 +22,14 @@ class DoctorAppointmentsScreen extends StatelessWidget {
       body: AnimatedBuilder(
         animation: appData,
         builder: (context, child) {
+          final doctor = getCurrentDoctor();
+
+          if (doctor == null) {
+            return const Center(
+              child: CircularProgressIndicator(),
+            );
+          }
+
           final appointments = appData.appointments.where(
             (appointment) {
               return appointment.doctorId == doctor.id;
@@ -217,23 +217,31 @@ class DoctorAppointmentsScreen extends StatelessWidget {
     );
   }
 
-  void changeStatus(
+  Future<void> changeStatus(
     BuildContext context,
     AppointmentModel appointment,
     String status,
-  ) {
-    AppData.instance.updateAppointmentStatus(
-      appointmentId: appointment.id,
-      status: status,
-    );
+  ) async {
+    try {
+      await AppData.instance.updateAppointmentStatus(
+        appointmentId: appointment.id,
+        status: status,
+      );
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'Appointment marked as $status.',
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Appointment marked as $status.'),
         ),
-      ),
-    );
+      );
+    } catch (_) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Appointment status could not be updated.'),
+        ),
+      );
+    }
   }
 
   Widget buildInformationRow(

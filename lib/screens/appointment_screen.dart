@@ -66,39 +66,53 @@ class _AppointmentScreenState extends State<AppointmentScreen> {
       isSaving = true;
     });
 
-    AppData.instance.bookAppointment(
-      doctor: widget.doctor,
-      date: selectedDate,
-      time: selectedTime!,
-      symptoms: symptomsController.text.trim(),
-      notes: notesController.text.trim(),
-    );
+    try {
+      await AppData.instance.bookAppointment(
+        doctor: widget.doctor,
+        date: selectedDate,
+        time: selectedTime!,
+        symptoms: symptomsController.text.trim(),
+        notes: notesController.text.trim(),
+      );
 
-    await showDialog<void>(
-      context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          title: const Text('Appointment Booked'),
-          content: Text(
-            'Your appointment with ${widget.doctor.name} '
-            'has been booked for ${formatDate(selectedDate)} '
-            'at $selectedTime.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.pop(dialogContext);
-              },
-              child: const Text('OK'),
+      if (!mounted) return;
+
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) {
+          return AlertDialog(
+            title: const Text('Appointment Booked'),
+            content: Text(
+              'Your appointment with ${widget.doctor.name} '
+              'has been booked for ${formatDate(selectedDate)} '
+              'at $selectedTime.',
             ),
-          ],
-        );
-      },
-    );
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(dialogContext);
+                },
+                child: const Text('OK'),
+              ),
+            ],
+          );
+        },
+      );
 
-    if (!mounted) return;
-
-    Navigator.pop(context);
+      if (!mounted) return;
+      Navigator.pop(context);
+    } catch (error) {
+      if (!mounted) return;
+      showMessage(
+        error.toString().replaceFirst('Bad state: ', ''),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          isSaving = false;
+        });
+      }
+    }
   }
 
   void showMessage(String message) {

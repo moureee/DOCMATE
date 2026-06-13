@@ -65,11 +65,7 @@ class AdminHome extends StatelessWidget {
               },
             ).length;
 
-            final emergencyUsage = appData.notifications.where(
-              (notification) {
-                return notification.title.toLowerCase().contains('emergency');
-              },
-            ).length;
+            final emergencyUsage = appData.emergencyRequestCount;
 
             return ListView(
               padding: const EdgeInsets.all(18),
@@ -77,7 +73,9 @@ class AdminHome extends StatelessWidget {
                 buildHeader(context),
                 const SizedBox(height: 22),
                 buildDashboardStats(
-                  users: appData.patients.length + appData.doctors.length,
+                  users: appData.totalUserCount > 0
+                      ? appData.totalUserCount
+                      : appData.patients.length + appData.doctors.length,
                   bookings: appData.appointments.length,
                   emergencyUsage: emergencyUsage,
                 ),

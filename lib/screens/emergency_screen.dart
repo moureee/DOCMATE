@@ -1,198 +1,311 @@
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../core/app_theme.dart';
 import '../data/app_data.dart';
 
-class EmergencyScreen extends StatelessWidget {
+class EmergencyScreen extends StatefulWidget {
   const EmergencyScreen({super.key});
 
-  Future<void> callNumber(
-    BuildContext context,
-    String number,
-  ) async {
-    final Uri phoneUri = Uri(
-      scheme: 'tel',
-      path: number,
-    );
+  @override
+  State<EmergencyScreen> createState() => _EmergencyScreenState();
+}
 
-    final bool opened = await launchUrl(phoneUri);
+class _EmergencyScreenState extends State<EmergencyScreen> {
+  Position? currentPosition;
+  bool isLoadingLocation = false;
+  bool isSendingRequest = false;
 
-    if (!opened && context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Could not open the phone application.',
-          ),
-        ),
-      );
+  @override
+  void initState() {
+    super.initState();
+    loadLocation();
+  }
+
+  Future<void> loadLocation() async {
+    setState(() {
+      isLoadingLocation = true;
+    });
+
+    try {
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        return;
+      }
+
+      final position = await Geolocator.getCurrentPosition();
+      if (!mounted) return;
+      setState(() {
+        currentPosition = position;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      showMessage(
+          'Location is unavailable. Hospitals are shown without distance.');
+    } finally {
+      if (mounted) {
+        setState(() {
+          isLoadingLocation = false;
+        });
+      }
     }
   }
 
-  void sendEmergencyRequest(BuildContext context) {
-    AppData.instance.sendEmergencyRequest();
+  Future<void> callNumber(String number) async {
+    final phoneUri = Uri(scheme: 'tel', path: number);
+    final opened = await launchUrl(phoneUri);
+    if (!opened && mounted) {
+      showMessage('Could not open the phone application.');
+    }
+  }
 
+  Future<void> sendEmergencyRequest() async {
+    if (isSendingRequest) return;
+    setState(() {
+      isSendingRequest = true;
+    });
+
+    try {
+      await AppData.instance.sendEmergencyRequest();
+      if (!mounted) return;
+      showMessage('Emergency request recorded successfully.');
+    } catch (_) {
+      if (!mounted) return;
+      showMessage('Emergency request could not be sent. Please call directly.');
+    } finally {
+      if (mounted) {
+        setState(() {
+          isSendingRequest = false;
+        });
+      }
+    }
+  }
+
+  void showMessage(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text(
-          'Emergency request recorded successfully.',
-        ),
-      ),
+      SnackBar(content: Text(message)),
     );
+  }
+
+  double? distanceTo(HospitalModel hospital) {
+    if (currentPosition == null ||
+        hospital.latitude == 0 ||
+        hospital.longitude == 0) {
+      return null;
+    }
+
+    return Geolocator.distanceBetween(
+          currentPosition!.latitude,
+          currentPosition!.longitude,
+          hospital.latitude,
+          hospital.longitude,
+        ) /
+        1000;
   }
 
   @override
   Widget build(BuildContext context) {
-    const hospitals = [
-      {
-        'name': 'City General Hospital',
-        'distance': '1.2 km away',
-        'phone': '999',
-      },
-      {
-        'name': 'Central Medical Centre',
-        'distance': '2.5 km away',
-        'phone': '999',
-      },
-      {
-        'name': 'Community Emergency Clinic',
-        'distance': '3.1 km away',
-        'phone': '999',
-      },
-    ];
+    final appData = AppData.instance;
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Emergency Support'),
+        actions: [
+          IconButton(
+            onPressed: isLoadingLocation ? null : loadLocation,
+            tooltip: 'Refresh location',
+            icon: isLoadingLocation
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.my_location),
+          ),
+        ],
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(18),
+      body: AnimatedBuilder(
+        animation: appData,
+        builder: (context, child) {
+          final hospitals = List<HospitalModel>.from(appData.hospitals);
+          hospitals.sort((first, second) {
+            final firstDistance = distanceTo(first) ?? double.infinity;
+            final secondDistance = distanceTo(second) ?? double.infinity;
+            return firstDistance.compareTo(secondDistance);
+          });
+
+          return ListView(
+            padding: const EdgeInsets.all(18),
+            children: [
+              Container(
+                padding: const EdgeInsets.all(22),
+                decoration: BoxDecoration(
+                  color: AppColors.danger,
+                  borderRadius: BorderRadius.circular(24),
+                ),
+                child: Column(
+                  children: [
+                    const Icon(
+                      Icons.emergency,
+                      color: Colors.white,
+                      size: 56,
+                    ),
+                    const SizedBox(height: 10),
+                    const Text(
+                      'Emergency Mode',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 23,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 7),
+                    const Text(
+                      'Use this feature only when immediate help is required.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.white),
+                    ),
+                    const SizedBox(height: 18),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.white,
+                          foregroundColor: AppColors.danger,
+                        ),
+                        onPressed: () {
+                          callNumber('999');
+                        },
+                        icon: const Icon(Icons.call),
+                        label: const Text('One-Tap Emergency Call'),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.white,
+                          side: const BorderSide(color: Colors.white),
+                        ),
+                        onPressed:
+                            isSendingRequest ? null : sendEmergencyRequest,
+                        icon: isSendingRequest
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Icon(Icons.send),
+                        label: Text(
+                          isSendingRequest
+                              ? 'Sending Request...'
+                              : 'Send Emergency Request',
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+              const Text(
+                'Nearby Hospitals',
+                style: TextStyle(
+                  fontSize: 19,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 12),
+              if (hospitals.isEmpty)
+                Container(
+                  padding: const EdgeInsets.all(18),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(color: Colors.grey.shade300),
+                  ),
+                  child: const Text(
+                    'No hospitals have been added by the administrator yet. Emergency calling remains available.',
+                    textAlign: TextAlign.center,
+                  ),
+                )
+              else
+                ...hospitals.map(buildHospitalCard),
+              const SizedBox(height: 18),
+              const Text(
+                'Emergency information must be verified for the country where the app is used. Queue and location estimates may not be exact.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Colors.black54,
+                  fontSize: 12,
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget buildHospitalCard(HospitalModel hospital) {
+    final distance = distanceTo(hospital);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: Colors.grey.shade300),
+      ),
+      child: Row(
         children: [
-          Container(
-            padding: const EdgeInsets.all(22),
-            decoration: BoxDecoration(
-              color: AppColors.danger,
-              borderRadius: BorderRadius.circular(24),
+          const CircleAvatar(
+            backgroundColor: AppColors.lightMint,
+            child: Icon(
+              Icons.local_hospital,
+              color: AppColors.primaryDark,
             ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(
-                  Icons.emergency,
-                  color: Colors.white,
-                  size: 56,
+                Text(
+                  hospital.name,
+                  style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
-                const SizedBox(height: 10),
-                const Text(
-                  'Emergency Mode',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 23,
-                    fontWeight: FontWeight.bold,
+                if (hospital.address.isNotEmpty)
+                  Text(
+                    hospital.address,
+                    style: const TextStyle(color: Colors.black54),
                   ),
-                ),
-                const SizedBox(height: 7),
-                const Text(
-                  'Use this feature only when immediate help '
-                  'is required.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: Colors.white,
-                  ),
-                ),
-                const SizedBox(height: 18),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.white,
-                      foregroundColor: AppColors.danger,
-                    ),
-                    onPressed: () {
-                      callNumber(context, '999');
-                    },
-                    icon: const Icon(Icons.call),
-                    label: const Text(
-                      'One-Tap Emergency Call',
-                    ),
-                  ),
+                Text(
+                  distance == null
+                      ? (hospital.isOpen24Hours
+                          ? 'Open 24 hours'
+                          : 'Distance unavailable')
+                      : '${distance.toStringAsFixed(1)} km away',
+                  style: const TextStyle(color: Colors.black54),
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 24),
-          const Text(
-            'Nearby Hospitals',
-            style: TextStyle(
-              fontSize: 19,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: 12),
-          ...hospitals.map((hospital) {
-            return Container(
-              margin: const EdgeInsets.only(bottom: 12),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(18),
-                border: Border.all(
-                  color: Colors.grey.shade300,
-                ),
-              ),
-              child: ListTile(
-                leading: const CircleAvatar(
-                  backgroundColor: AppColors.lightMint,
-                  child: Icon(
-                    Icons.local_hospital,
-                    color: AppColors.primaryDark,
-                  ),
-                ),
-                title: Text(
-                  hospital['name']!,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                subtitle: Text(
-                  hospital['distance']!,
-                ),
-                trailing: IconButton(
-                  onPressed: () {
-                    callNumber(
-                      context,
-                      hospital['phone']!,
-                    );
-                  },
-                  icon: const Icon(
-                    Icons.call,
-                    color: AppColors.danger,
-                  ),
-                ),
-              ),
-            );
-          }),
-          const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              onPressed: () {
-                sendEmergencyRequest(context);
-              },
-              icon: const Icon(Icons.sos),
-              label: const Text(
-                'Send Emergency Request',
-              ),
-            ),
-          ),
-          const SizedBox(height: 14),
-          const Text(
-            'Note: The hospitals and numbers shown here are '
-            'demonstration data. Replace them with verified local '
-            'emergency information before real use.',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: Colors.black54,
-              fontSize: 12,
-            ),
+          IconButton.filled(
+            onPressed: () {
+              callNumber(hospital.phone);
+            },
+            icon: const Icon(Icons.call),
           ),
         ],
       ),

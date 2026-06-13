@@ -13,87 +13,90 @@ class QueuePredictionScreen extends StatefulWidget {
 class _QueuePredictionScreenState extends State<QueuePredictionScreen> {
   String? selectedDoctorId;
 
-  @override
-  void initState() {
-    super.initState();
+  DoctorModel? findSelectedDoctor(List<DoctorModel> doctors) {
+    if (doctors.isEmpty) return null;
 
-    final doctors = AppData.instance.approvedDoctors;
+    selectedDoctorId ??= doctors.first.id;
 
-    if (doctors.isNotEmpty) {
-      selectedDoctorId = doctors.first.id;
-    }
-  }
-
-  DoctorModel? findSelectedDoctor() {
-    for (final doctor in AppData.instance.approvedDoctors) {
-      if (doctor.id == selectedDoctorId) {
-        return doctor;
-      }
+    for (final doctor in doctors) {
+      if (doctor.id == selectedDoctorId) return doctor;
     }
 
-    return null;
+    selectedDoctorId = doctors.first.id;
+    return doctors.first;
   }
 
   @override
   Widget build(BuildContext context) {
-    final doctors = AppData.instance.approvedDoctors;
-    final selectedDoctor = findSelectedDoctor();
+    final appData = AppData.instance;
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Queue Time Prediction'),
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(18),
-        child: doctors.isEmpty
-            ? const Center(
+      body: AnimatedBuilder(
+        animation: appData,
+        builder: (context, child) {
+          final doctors = appData.approvedDoctors;
+          final selectedDoctor = findSelectedDoctor(doctors);
+
+          if (doctors.isEmpty) {
+            return const Center(
+              child: Padding(
+                padding: EdgeInsets.all(24),
                 child: Text(
                   'No approved doctors are available.',
+                  textAlign: TextAlign.center,
                 ),
-              )
-            : Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Select Doctor',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  DropdownButtonFormField<String>(
-                    initialValue: selectedDoctorId,
-                    decoration: const InputDecoration(
-                      prefixIcon: Icon(
-                        Icons.medical_services,
-                      ),
-                    ),
-                    items: doctors.map((doctor) {
-                      return DropdownMenuItem<String>(
-                        value: doctor.id,
-                        child: Text(doctor.name),
-                      );
-                    }).toList(),
-                    onChanged: (value) {
-                      setState(() {
-                        selectedDoctorId = value;
-                      });
-                    },
-                  ),
-                  const SizedBox(height: 26),
-                  if (selectedDoctor != null)
-                    buildPredictionCard(selectedDoctor),
-                  const SizedBox(height: 18),
-                  buildExplanationCard(),
-                ],
               ),
+            );
+          }
+
+          return SingleChildScrollView(
+            padding: const EdgeInsets.all(18),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Select Doctor',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                DropdownButtonFormField<String>(
+                  initialValue: selectedDoctorId,
+                  decoration: const InputDecoration(
+                    prefixIcon: Icon(Icons.medical_services),
+                  ),
+                  items: doctors.map((doctor) {
+                    return DropdownMenuItem<String>(
+                      value: doctor.id,
+                      child: Text(doctor.name),
+                    );
+                  }).toList(),
+                  onChanged: (value) {
+                    setState(() {
+                      selectedDoctorId = value;
+                    });
+                  },
+                ),
+                const SizedBox(height: 26),
+                if (selectedDoctor != null)
+                  buildPredictionCard(appData, selectedDoctor),
+                const SizedBox(height: 18),
+                buildExplanationCard(),
+              ],
+            ),
+          );
+        },
       ),
     );
   }
 
-  Widget buildPredictionCard(DoctorModel doctor) {
-    final predictedMinutes = AppData.instance.predictedQueueMinutes(doctor);
+  Widget buildPredictionCard(AppData appData, DoctorModel doctor) {
+    final predictedMinutes = appData.predictedQueueMinutes(doctor);
 
     return Container(
       width: double.infinity,
@@ -104,10 +107,7 @@ class _QueuePredictionScreenState extends State<QueuePredictionScreen> {
       ),
       child: Column(
         children: [
-          const Icon(
-            Icons.hourglass_bottom,
-            size: 52,
-          ),
+          const Icon(Icons.hourglass_bottom, size: 52),
           const SizedBox(height: 12),
           Text(
             '$predictedMinutes minutes',
@@ -119,52 +119,39 @@ class _QueuePredictionScreenState extends State<QueuePredictionScreen> {
           const SizedBox(height: 5),
           const Text(
             'Estimated Waiting Time',
-            style: TextStyle(
-              fontSize: 16,
-            ),
+            style: TextStyle(fontSize: 16),
           ),
-          const Divider(
-            height: 32,
-            color: Colors.black26,
-          ),
-          buildInformationRow(
-            'Doctor',
-            doctor.name,
-          ),
+          const Divider(height: 32, color: Colors.black26),
+          buildInformationRow('Doctor', doctor.name),
           const SizedBox(height: 8),
-          buildInformationRow(
-            'Specialty',
-            doctor.specialty,
-          ),
+          buildInformationRow('Specialty', doctor.specialty),
           const SizedBox(height: 8),
           buildInformationRow(
             'Patients Ahead',
             doctor.queueLength.toString(),
+          ),
+          const SizedBox(height: 8),
+          buildInformationRow(
+            'Average Consultation',
+            '${doctor.averageConsultationMinutes} minutes',
           ),
         ],
       ),
     );
   }
 
-  Widget buildInformationRow(
-    String title,
-    String value,
-  ) {
+  Widget buildInformationRow(String title, String value) {
     return Row(
       children: [
         Expanded(
           child: Text(
             title,
-            style: const TextStyle(
-              color: Colors.black54,
-            ),
+            style: const TextStyle(color: Colors.black54),
           ),
         ),
         Text(
           value,
-          style: const TextStyle(
-            fontWeight: FontWeight.bold,
-          ),
+          style: const TextStyle(fontWeight: FontWeight.bold),
         ),
       ],
     );
@@ -177,44 +164,22 @@ class _QueuePredictionScreenState extends State<QueuePredictionScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: Colors.grey.shade300,
-        ),
+        border: Border.all(color: Colors.grey.shade300),
       ),
       child: const Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Icon(
-                Icons.calculate_outlined,
-                color: AppColors.primaryDark,
-              ),
-              SizedBox(width: 8),
-              Text(
-                'How prediction works',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
-          ),
-          SizedBox(height: 10),
           Text(
-            'Estimated time = number of patients ahead × '
-            '12 minutes average consultation time + '
-            '5 minutes delay buffer.',
+            'How it works',
             style: TextStyle(
-              color: Colors.black54,
+              fontWeight: FontWeight.bold,
+              fontSize: 16,
             ),
           ),
           SizedBox(height: 8),
           Text(
-            'This is a simple prediction for the university project.',
-            style: TextStyle(
-              color: Colors.black54,
-              fontSize: 12,
-            ),
+            'Estimated wait = active patients in today\'s queue × the doctor\'s average consultation time. This is an estimate, not a guarantee.',
+            style: TextStyle(color: Colors.black54),
           ),
         ],
       ),
