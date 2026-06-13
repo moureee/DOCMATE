@@ -5,6 +5,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'doctor_profile_screen.dart';
 import 'patient_appointments_screen.dart';
 import 'ai_symptom_checker_screen.dart';
+import 'health_card_screen.dart';
+import 'emergency_screen.dart';
 
 class PatientHome extends StatelessWidget {
   const PatientHome({super.key});
@@ -56,16 +58,12 @@ class _PatientHomeScreenState extends State<PatientHomeScreen> {
 
       if (patientDoc.exists) {
         final data = patientDoc.data();
-
         if (data != null) {
-          if (data["name"] != null &&
-              data["name"].toString().trim().isNotEmpty) {
+          if (data["name"] != null && data["name"].toString().trim().isNotEmpty) {
             name = data["name"].toString();
-          } else if (data["fullName"] != null &&
-              data["fullName"].toString().trim().isNotEmpty) {
+          } else if (data["fullName"] != null && data["fullName"].toString().trim().isNotEmpty) {
             name = data["fullName"].toString();
-          } else if (data["patientName"] != null &&
-              data["patientName"].toString().trim().isNotEmpty) {
+          } else if (data["patientName"] != null && data["patientName"].toString().trim().isNotEmpty) {
             name = data["patientName"].toString();
           }
         }
@@ -76,16 +74,12 @@ class _PatientHomeScreenState extends State<PatientHomeScreen> {
             .collection("users")
             .doc(user.uid)
             .get();
-
         if (userDoc.exists) {
           final data = userDoc.data();
-
           if (data != null) {
-            if (data["name"] != null &&
-                data["name"].toString().trim().isNotEmpty) {
+            if (data["name"] != null && data["name"].toString().trim().isNotEmpty) {
               name = data["name"].toString();
-            } else if (data["fullName"] != null &&
-                data["fullName"].toString().trim().isNotEmpty) {
+            } else if (data["fullName"] != null && data["fullName"].toString().trim().isNotEmpty) {
               name = data["fullName"].toString();
             }
           }
@@ -104,7 +98,6 @@ class _PatientHomeScreenState extends State<PatientHomeScreen> {
     }
 
     if (!mounted) return;
-
     setState(() {
       patientName = name;
     });
@@ -126,91 +119,61 @@ class _PatientHomeScreenState extends State<PatientHomeScreen> {
     if (data["name"] != null && data["name"].toString().trim().isNotEmpty) {
       return data["name"].toString();
     }
-
-    if (data["fullName"] != null &&
-        data["fullName"].toString().trim().isNotEmpty) {
+    if (data["fullName"] != null && data["fullName"].toString().trim().isNotEmpty) {
       return data["fullName"].toString();
     }
-
-    if (data["doctorName"] != null &&
-        data["doctorName"].toString().trim().isNotEmpty) {
+    if (data["doctorName"] != null && data["doctorName"].toString().trim().isNotEmpty) {
       return data["doctorName"].toString();
     }
-
     return "Doctor";
   }
 
   String getDoctorSpecialty(Map<String, dynamic> data) {
-    if (data["specialty"] != null &&
-        data["specialty"].toString().trim().isNotEmpty) {
+    if (data["specialty"] != null && data["specialty"].toString().trim().isNotEmpty) {
       return data["specialty"].toString();
     }
-
-    if (data["department"] != null &&
-        data["department"].toString().trim().isNotEmpty) {
+    if (data["department"] != null && data["department"].toString().trim().isNotEmpty) {
       return data["department"].toString();
     }
-
     return "General";
   }
 
   String getDoctorRating(Map<String, dynamic> data) {
-    if (data["rating"] == null) {
-      return "0.0";
-    }
-
+    if (data["rating"] == null) return "0.0";
     return data["rating"].toString();
   }
 
   String getDoctorAvailableText(Map<String, dynamic> data) {
-    if (data["available"] != null &&
-        data["available"].toString().trim().isNotEmpty) {
+    if (data["available"] != null && data["available"].toString().trim().isNotEmpty) {
       return data["available"].toString();
     }
-
-    if (data["availability"] != null &&
-        data["availability"].toString().trim().isNotEmpty) {
+    if (data["availability"] != null && data["availability"].toString().trim().isNotEmpty) {
       return data["availability"].toString();
     }
-
     return "Availability not set";
   }
 
   bool isDoctorApproved(Map<String, dynamic> data) {
-    if (data["approved"] == true) {
-      return true;
-    }
-
-    if (data["isApproved"] == true) {
-      return true;
-    }
-
-    if (data["status"] != null &&
-        data["status"].toString().toLowerCase() == "approved") {
-      return true;
-    }
-
+    if (data["approved"] == true) return true;
+    if (data["isApproved"] == true) return true;
+    if (data["status"] != null && data["status"].toString().toLowerCase() == "approved") return true;
     return false;
   }
 
   bool matchesSearch(Map<String, dynamic> data) {
     final searchText = _searchController.text.toLowerCase().trim();
-
-    if (searchText.isEmpty) {
-      return true;
-    }
-
+    if (searchText.isEmpty) return true;
     final name = getDoctorName(data).toLowerCase();
     final specialty = getDoctorSpecialty(data).toLowerCase();
-
     return name.contains(searchText) || specialty.contains(searchText);
   }
 
-  void openDoctorProfile(Map<String, dynamic> doctor) {
+  void openDoctorProfile(String doctorId, Map<String, dynamic> doctor) {
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => DoctorProfileScreen(
+          doctorId: doctorId,
           doctorName: getDoctorName(doctor),
           specialty: getDoctorSpecialty(doctor),
           rating: getDoctorRating(doctor),
@@ -238,6 +201,24 @@ class _PatientHomeScreenState extends State<PatientHomeScreen> {
     );
   }
 
+  void openHealthCard() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const HealthCardScreen(),
+      ),
+    );
+  }
+
+  void openEmergency() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const EmergencyScreen(),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -257,22 +238,10 @@ class _PatientHomeScreenState extends State<PatientHomeScreen> {
           }
         },
         items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.home),
-            label: "Home",
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.calendar_month),
-            label: "Bookings",
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.chat_bubble_outline),
-            label: "Chat",
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.person_outline),
-            label: "Profile",
-          ),
+          BottomNavigationBarItem(icon: Icon(Icons.home), label: "Home"),
+          BottomNavigationBarItem(icon: Icon(Icons.calendar_month), label: "Bookings"),
+          BottomNavigationBarItem(icon: Icon(Icons.chat_bubble_outline), label: "Chat"),
+          BottomNavigationBarItem(icon: Icon(Icons.person_outline), label: "Profile"),
         ],
       ),
       body: SafeArea(
@@ -306,35 +275,19 @@ class _PatientHomeScreenState extends State<PatientHomeScreen> {
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              "Welcome,",
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.black54,
-              ),
-            ),
+            const Text("Welcome,", style: TextStyle(fontSize: 14, color: Colors.black54)),
             const SizedBox(height: 4),
-            Text(
-              patientName,
-              style: const TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
+            Text(patientName, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
           ],
         ),
         Row(
           children: [
             IconButton(
-              onPressed: () {
-                showMessage("Notifications will be added later");
-              },
+              onPressed: () => showMessage("Notifications will be added later"),
               icon: const Icon(Icons.notifications_none),
             ),
             IconButton(
-              onPressed: () {
-                showMessage("Settings will be added later");
-              },
+              onPressed: () => showMessage("Settings will be added later"),
               icon: const Icon(Icons.settings),
             ),
           ],
@@ -346,27 +299,18 @@ class _PatientHomeScreenState extends State<PatientHomeScreen> {
   Widget buildSearchBox() {
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.black,
-        borderRadius: BorderRadius.circular(18),
-      ),
+      decoration: BoxDecoration(color: Colors.black, borderRadius: BorderRadius.circular(18)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
             "Let's Find Your Specialist",
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 17,
-              fontWeight: FontWeight.bold,
-            ),
+            style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 12),
           TextField(
             controller: _searchController,
-            onChanged: (value) {
-              setState(() {});
-            },
+            onChanged: (value) => setState(() {}),
             decoration: InputDecoration(
               hintText: "Search doctor or specialty...",
               prefixIcon: const Icon(Icons.search),
@@ -394,18 +338,13 @@ class _PatientHomeScreenState extends State<PatientHomeScreen> {
             subtitle: "Check Firestore rules or internet connection.",
           );
         }
-
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(
-            child: Padding(
-              padding: EdgeInsets.all(20),
-              child: CircularProgressIndicator(),
-            ),
+            child: Padding(padding: EdgeInsets.all(20), child: CircularProgressIndicator()),
           );
         }
 
         final docs = snapshot.data?.docs ?? [];
-
         final approvedDoctors = docs.where((doc) {
           final data = doc.data();
           return isDoctorApproved(data) && matchesSearch(data);
@@ -414,25 +353,20 @@ class _PatientHomeScreenState extends State<PatientHomeScreen> {
         if (approvedDoctors.isEmpty) {
           return buildInfoBox(
             title: "No approved doctors available",
-            subtitle:
-                "Doctors must be added and approved by admin before patients can book appointments.",
+            subtitle: "Doctors must be added and approved by admin before patients can book appointments.",
           );
         }
 
         return Column(
           children: approvedDoctors.map((doc) {
-            final data = doc.data();
-            return buildDoctorCard(data);
+            return buildDoctorCard(doc.id, doc.data());
           }).toList(),
         );
       },
     );
   }
 
-  Widget buildInfoBox({
-    required String title,
-    required String subtitle,
-  }) {
+  Widget buildInfoBox({required String title, required String subtitle}) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(18),
@@ -443,44 +377,21 @@ class _PatientHomeScreenState extends State<PatientHomeScreen> {
       ),
       child: Column(
         children: [
-          const Icon(
-            Icons.info_outline,
-            color: mainColor,
-            size: 34,
-          ),
+          const Icon(Icons.info_outline, color: mainColor, size: 34),
           const SizedBox(height: 10),
-          Text(
-            title,
-            style: const TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 16,
-            ),
-          ),
+          Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
           const SizedBox(height: 6),
-          Text(
-            subtitle,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: Colors.black54,
-              fontSize: 13,
-            ),
-          ),
+          Text(subtitle, textAlign: TextAlign.center, style: const TextStyle(color: Colors.black54, fontSize: 13)),
         ],
       ),
     );
   }
 
   Widget buildSectionTitle(String title) {
-    return Text(
-      title,
-      style: const TextStyle(
-        fontSize: 19,
-        fontWeight: FontWeight.bold,
-      ),
-    );
+    return Text(title, style: const TextStyle(fontSize: 19, fontWeight: FontWeight.bold));
   }
 
-  Widget buildDoctorCard(Map<String, dynamic> doctor) {
+  Widget buildDoctorCard(String doctorId, Map<String, dynamic> doctor) {
     final doctorName = getDoctorName(doctor);
     final specialty = getDoctorSpecialty(doctor);
     final rating = getDoctorRating(doctor);
@@ -489,33 +400,20 @@ class _PatientHomeScreenState extends State<PatientHomeScreen> {
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
       padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: mainColor,
-        borderRadius: BorderRadius.circular(18),
-      ),
+      decoration: BoxDecoration(color: mainColor, borderRadius: BorderRadius.circular(18)),
       child: Row(
         children: [
           const CircleAvatar(
             radius: 32,
             backgroundColor: Colors.white,
-            child: Icon(
-              Icons.medical_services,
-              color: mainColor,
-              size: 32,
-            ),
+            child: Icon(Icons.medical_services, color: mainColor, size: 32),
           ),
           const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  doctorName,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 15,
-                  ),
-                ),
+                Text(doctorName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
                 const SizedBox(height: 4),
                 Text(specialty),
                 const SizedBox(height: 4),
@@ -527,32 +425,22 @@ class _PatientHomeScreenState extends State<PatientHomeScreen> {
                   ],
                 ),
                 const SizedBox(height: 4),
-                Text(
-                  available,
-                  style: const TextStyle(fontSize: 12),
-                ),
+                Text(available, style: const TextStyle(fontSize: 12)),
               ],
             ),
           ),
           Column(
             children: [
               IconButton(
-                onPressed: () {
-                  showMessage("$doctorName added to favorite");
-                },
+                onPressed: () => showMessage("$doctorName added to favorite"),
                 icon: const Icon(Icons.favorite_border),
               ),
               ElevatedButton(
-                onPressed: () {
-                  openDoctorProfile(doctor);
-                },
+                onPressed: () => openDoctorProfile(doctorId, doctor),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.black,
                   foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 8,
-                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 ),
                 child: const Text("View"),
               ),
@@ -582,9 +470,7 @@ class _PatientHomeScreenState extends State<PatientHomeScreen> {
                 icon: Icons.timer,
                 title: "Queue Prediction",
                 subtitle: "Waiting time",
-                onTap: () {
-                  showMessage("Queue prediction appears in doctor profile");
-                },
+                onTap: () => showMessage("Queue prediction appears in doctor profile"),
               ),
             ),
           ],
@@ -597,9 +483,7 @@ class _PatientHomeScreenState extends State<PatientHomeScreen> {
                 icon: Icons.emergency,
                 title: "Emergency Mode",
                 subtitle: "Quick help",
-                onTap: () {
-                  showMessage("Emergency screen will be added later");
-                },
+                onTap: openEmergency, // ✅ এখন কাজ করবে
               ),
             ),
             const SizedBox(width: 12),
@@ -608,9 +492,7 @@ class _PatientHomeScreenState extends State<PatientHomeScreen> {
                 icon: Icons.health_and_safety,
                 title: "Health Card",
                 subtitle: "BMI & allergies",
-                onTap: () {
-                  showMessage("Quick health card will be added later");
-                },
+                onTap: openHealthCard,
               ),
             ),
           ],
@@ -634,28 +516,16 @@ class _PatientHomeScreenState extends State<PatientHomeScreen> {
         decoration: BoxDecoration(
           color: lightColor,
           borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: mainColor.withOpacity(0.4)),
+          border: Border.all(color: mainColor.withValues(alpha: 0.4)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Icon(icon, color: mainColor, size: 32),
             const Spacer(),
-            Text(
-              title,
-              style: const TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 14,
-              ),
-            ),
+            Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
             const SizedBox(height: 4),
-            Text(
-              subtitle,
-              style: const TextStyle(
-                fontSize: 12,
-                color: Colors.black54,
-              ),
-            ),
+            Text(subtitle, style: const TextStyle(fontSize: 12, color: Colors.black54)),
           ],
         ),
       ),

@@ -1,22 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-
 import 'role_selection_screen.dart';
+import 'doctor_appointments_screen.dart'; // 👈 নতুন import
 
 class DoctorHome extends StatelessWidget {
   const DoctorHome({super.key});
 
   Future<void> logout(BuildContext context) async {
     await FirebaseAuth.instance.signOut();
-
-    Navigator.pushAndRemoveUntil(
-      context,
-      MaterialPageRoute(
-        builder: (context) => const RoleSelectionScreen(),
-      ),
-      (route) => false,
-    );
+    if (context.mounted) {
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (context) => const RoleSelectionScreen()),
+        (route) => false,
+      );
+    }
   }
 
   Future<int> getAppointmentCount(String doctorId, String status) async {
@@ -25,8 +24,29 @@ class DoctorHome extends StatelessWidget {
         .where('doctorId', isEqualTo: doctorId)
         .where('status', isEqualTo: status)
         .get();
-
     return snapshot.docs.length;
+  }
+
+  Future<void> toggleAvailability(
+      BuildContext context, String doctorId, bool currentStatus) async {
+    try {
+      await FirebaseFirestore.instance
+          .collection('doctors')
+          .doc(doctorId)
+          .update({'available': !currentStatus});
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(!currentStatus
+                ? 'You are now Online ✅'
+                : 'You are now Offline ❌'),
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint("Error updating availability: $e");
+    }
   }
 
   @override
@@ -37,20 +57,21 @@ class DoctorHome extends StatelessWidget {
       backgroundColor: const Color(0xFFE9FFF9),
       appBar: AppBar(
         backgroundColor: const Color(0xFF00D9B8),
-        title: const Text('Doctor Dashboard'),
+        title: const Text(
+          'Doctor Dashboard',
+          style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+        ),
+        centerTitle: true,
+        elevation: 0,
         actions: [
           IconButton(
-            onPressed: () {
-              logout(context);
-            },
-            icon: const Icon(Icons.logout),
+            onPressed: () => logout(context),
+            icon: const Icon(Icons.logout, color: Colors.black),
           ),
         ],
       ),
       body: currentUser == null
-          ? const Center(
-              child: Text('No doctor logged in'),
-            )
+          ? const Center(child: Text('No doctor logged in'))
           : StreamBuilder<DocumentSnapshot>(
               stream: FirebaseFirestore.instance
                   .collection('doctors')
@@ -59,16 +80,12 @@ class DoctorHome extends StatelessWidget {
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(
-                    child: CircularProgressIndicator(
-                      color: Color(0xFF00D9B8),
-                    ),
+                    child: CircularProgressIndicator(color: Color(0xFF00D9B8)),
                   );
                 }
 
                 if (!snapshot.hasData || !snapshot.data!.exists) {
-                  return const Center(
-                    child: Text('Doctor profile not found'),
-                  );
+                  return const Center(child: Text('Doctor profile not found'));
                 }
 
                 Map<String, dynamic> doctorData =
@@ -85,6 +102,7 @@ class DoctorHome extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      // Profile Card
                       Container(
                         width: double.infinity,
                         padding: const EdgeInsets.all(18),
@@ -104,41 +122,28 @@ class DoctorHome extends StatelessWidget {
                             const CircleAvatar(
                               radius: 32,
                               backgroundColor: Color(0xFF00D9B8),
-                              child: Icon(
-                                Icons.medical_services,
-                                color: Colors.white,
-                                size: 36,
-                              ),
+                              child: Icon(Icons.medical_services,
+                                  color: Colors.white, size: 36),
                             ),
                             const SizedBox(width: 15),
                             Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text(
-                                    'Dr. $name',
-                                    style: const TextStyle(
-                                      fontSize: 20,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
+                                  Text('Dr. $name',
+                                      style: const TextStyle(
+                                          fontSize: 20,
+                                          fontWeight: FontWeight.bold)),
                                   const SizedBox(height: 5),
-                                  Text(
-                                    specialty,
-                                    style: const TextStyle(
-                                      fontSize: 14,
-                                      color: Colors.black87,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
+                                  Text(specialty,
+                                      style: const TextStyle(
+                                          fontSize: 14,
+                                          color: Colors.black87,
+                                          fontWeight: FontWeight.w600)),
                                   const SizedBox(height: 4),
-                                  Text(
-                                    email,
-                                    style: const TextStyle(
-                                      fontSize: 12,
-                                      color: Colors.black54,
-                                    ),
-                                  ),
+                                  Text(email,
+                                      style: const TextStyle(
+                                          fontSize: 12, color: Colors.black54)),
                                 ],
                               ),
                             ),
@@ -146,6 +151,8 @@ class DoctorHome extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 15),
+
+                      // Status Bar
                       Container(
                         width: double.infinity,
                         padding: const EdgeInsets.all(14),
@@ -155,8 +162,7 @@ class DoctorHome extends StatelessWidget {
                               : Colors.orange.shade50,
                           borderRadius: BorderRadius.circular(14),
                           border: Border.all(
-                            color: approved ? Colors.green : Colors.orange,
-                          ),
+                              color: approved ? Colors.green : Colors.orange),
                         ),
                         child: Text(
                           approved
@@ -171,14 +177,13 @@ class DoctorHome extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 22),
-                      const Text(
-                        'Doctor Insights',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
+
+                      const Text('Doctor Insights',
+                          style: TextStyle(
+                              fontSize: 18, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 12),
+
+                      // Insights Cards
                       Row(
                         children: [
                           Expanded(
@@ -186,9 +191,7 @@ class DoctorHome extends StatelessWidget {
                               title: 'Pending',
                               icon: Icons.pending_actions,
                               future: getAppointmentCount(
-                                currentUser.uid,
-                                'pending',
-                              ),
+                                  currentUser.uid, 'pending'),
                             ),
                           ),
                           const SizedBox(width: 12),
@@ -197,22 +200,19 @@ class DoctorHome extends StatelessWidget {
                               title: 'Completed',
                               icon: Icons.check_circle,
                               future: getAppointmentCount(
-                                currentUser.uid,
-                                'completed',
-                              ),
+                                  currentUser.uid, 'completed'),
                             ),
                           ),
                         ],
                       ),
                       const SizedBox(height: 22),
-                      const Text(
-                        'Doctor Services',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
+
+                      const Text('Doctor Services',
+                          style: TextStyle(
+                              fontSize: 18, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 12),
+
+                      // Grid View Services
                       GridView.count(
                         crossAxisCount: 2,
                         shrinkWrap: true,
@@ -220,67 +220,114 @@ class DoctorHome extends StatelessWidget {
                         crossAxisSpacing: 14,
                         mainAxisSpacing: 14,
                         children: [
+                          // ✅ Appointments — এখন কাজ করবে
                           DoctorFeatureCard(
                             title: 'Appointments',
                             icon: Icons.calendar_month,
                             onTap: () {
-                              showComingSoon(context);
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) =>
+                                      DoctorAppointmentsScreen(
+                                    doctorId: currentUser.uid,
+                                    doctorName: name,
+                                  ),
+                                ),
+                              );
                             },
                           ),
+
+                          // ✅ Availability Toggle — এখন Snackbar দেখাবে
                           DoctorFeatureCard(
-                            title: 'Set Availability',
-                            icon: Icons.access_time,
-                            onTap: () {
-                              showComingSoon(context);
-                            },
+                            title: available ? 'Set Offline' : 'Set Online',
+                            icon: available
+                                ? Icons.wifi
+                                : Icons.wifi_off,
+                            onTap: () => toggleAvailability(
+                                context, currentUser.uid, available),
                           ),
+
+                          // ✅ Prescriptions — Appointments screen-এ filter করে দেখাবে
                           DoctorFeatureCard(
                             title: 'Prescriptions',
                             icon: Icons.medication,
                             onTap: () {
-                              showComingSoon(context);
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) =>
+                                      DoctorAppointmentsScreen(
+                                    doctorId: currentUser.uid,
+                                    doctorName: name,
+                                    initialFilter: 'completed', // 👈 completed appointments
+                                  ),
+                                ),
+                              );
                             },
                           ),
+
+                          // ✅ Patient Records — accepted + completed রোগীদের দেখাবে
                           DoctorFeatureCard(
                             title: 'Patient Records',
                             icon: Icons.folder_shared,
                             onTap: () {
-                              showComingSoon(context);
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) =>
+                                      DoctorAppointmentsScreen(
+                                    doctorId: currentUser.uid,
+                                    doctorName: name,
+                                    initialFilter: 'accepted', // 👈 accepted patients
+                                  ),
+                                ),
+                              );
                             },
                           ),
                         ],
                       ),
                       const SizedBox(height: 22),
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.black,
-                          borderRadius: BorderRadius.circular(18),
-                          border: Border.all(
-                            color: const Color(0xFF00D9B8),
-                            width: 3,
+
+                      // Availability Bottom Banner
+                      InkWell(
+                        onTap: () => toggleAvailability(
+                            context, currentUser.uid, available),
+                        borderRadius: BorderRadius.circular(18),
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: Colors.black,
+                            borderRadius: BorderRadius.circular(18),
+                            border: Border.all(
+                                color: const Color(0xFF00D9B8), width: 3),
                           ),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(
-                              available ? Icons.check_circle : Icons.cancel,
-                              color: const Color(0xFF9FF5E5),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Text(
+                          child: Row(
+                            children: [
+                              Icon(
                                 available
-                                    ? 'You are currently available for appointments'
-                                    : 'You are currently unavailable',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
+                                    ? Icons.check_circle
+                                    : Icons.cancel,
+                                color: available
+                                    ? const Color(0xFF00D9B8)
+                                    : Colors.redAccent,
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  available
+                                      ? 'You are currently Available (Tap to go Offline)'
+                                      : 'You are currently Unavailable (Tap to go Online)',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
+                                  ),
                                 ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
                     ],
@@ -290,16 +337,9 @@ class DoctorHome extends StatelessWidget {
             ),
     );
   }
-
-  void showComingSoon(BuildContext context) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('This feature will be added next'),
-      ),
-    );
-  }
 }
 
+// ── Insights Count Card ──────────────────────────────────────
 class DoctorCountCard extends StatelessWidget {
   final String title;
   final IconData icon;
@@ -318,8 +358,9 @@ class DoctorCountCard extends StatelessWidget {
       future: future,
       builder: (context, snapshot) {
         String count = '0';
-
-        if (snapshot.hasData) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          count = '...';
+        } else if (snapshot.hasData) {
           count = snapshot.data.toString();
         }
 
@@ -328,35 +369,21 @@ class DoctorCountCard extends StatelessWidget {
           decoration: BoxDecoration(
             color: Colors.black,
             borderRadius: BorderRadius.circular(18),
-            border: Border.all(
-              color: const Color(0xFF00D9B8),
-              width: 3,
-            ),
+            border: Border.all(color: const Color(0xFF00D9B8), width: 3),
           ),
           child: Column(
             children: [
-              Icon(
-                icon,
-                color: const Color(0xFF9FF5E5),
-                size: 34,
-              ),
+              Icon(icon, color: const Color(0xFF9FF5E5), size: 34),
               const SizedBox(height: 10),
-              Text(
-                count,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 26,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
+              Text(count,
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 26,
+                      fontWeight: FontWeight.bold)),
               const SizedBox(height: 5),
-              Text(
-                title,
-                style: const TextStyle(
-                  color: Colors.white70,
-                  fontSize: 13,
-                ),
-              ),
+              Text(title,
+                  style:
+                      const TextStyle(color: Colors.white70, fontSize: 13)),
             ],
           ),
         );
@@ -365,6 +392,7 @@ class DoctorCountCard extends StatelessWidget {
   }
 }
 
+// ── Feature Grid Card ────────────────────────────────────────
 class DoctorFeatureCard extends StatelessWidget {
   final String title;
   final IconData icon;
@@ -398,20 +426,12 @@ class DoctorFeatureCard extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              icon,
-              size: 40,
-              color: const Color(0xFF00D9B8),
-            ),
+            Icon(icon, size: 40, color: const Color(0xFF00D9B8)),
             const SizedBox(height: 12),
-            Text(
-              title,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 13,
-              ),
-            ),
+            Text(title,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                    fontWeight: FontWeight.bold, fontSize: 13)),
           ],
         ),
       ),

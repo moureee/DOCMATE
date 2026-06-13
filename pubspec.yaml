@@ -16,6 +16,9 @@ dependencies:
   firebase_auth: ^6.5.1
   cloud_firestore: ^6.4.1
   google_sign_in: ^7.2.0
+  url_launcher: ^6.2.5
+  geolocator: ^13.0.2        # ← লোকেশন ট্র্যাকিংয়ের জন্য যুক্ত করা হয়েছে
+  permission_handler: ^11.3.1 # ← ইউজার থেকে সহজে পারমিশন নেওয়ার জন্য যুক্ত করা হয়েছে
 
 dev_dependencies:
   flutter_test:

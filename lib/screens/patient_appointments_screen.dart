@@ -17,22 +17,18 @@ class PatientAppointmentsScreen extends StatelessWidget {
 
   bool isActiveAppointment(Map<String, dynamic> data) {
     final status = data["status"]?.toString().toLowerCase() ?? "pending";
-
     if (status == "canceled") return false;
     if (status == "rejected") return false;
     if (status == "completed") return false;
-
     return true;
   }
 
   Color statusColor(String status) {
     final value = status.toLowerCase();
-
     if (value == "accepted") return Colors.green;
     if (value == "completed") return Colors.blue;
     if (value == "canceled") return Colors.red;
     if (value == "rejected") return Colors.red;
-
     return Colors.orange;
   }
 
@@ -48,7 +44,6 @@ class PatientAppointmentsScreen extends StatelessWidget {
         "status": "canceled",
         "updatedAt": Timestamp.now(),
       });
-
       showMessage(context, "Appointment canceled");
     } catch (e) {
       debugPrint("Cancel error: $e");
@@ -65,7 +60,6 @@ class PatientAppointmentsScreen extends StatelessWidget {
           .collection("appointments")
           .doc(appointmentId)
           .delete();
-
       showMessage(context, "Appointment record deleted");
     } catch (e) {
       debugPrint("Delete error: $e");
@@ -77,14 +71,26 @@ class PatientAppointmentsScreen extends StatelessWidget {
     BuildContext context,
     Map<String, dynamic> data,
   ) {
+    final String docId = data["doctorId"]?.toString() ?? "";
+
+    if (docId.isEmpty) {
+      showMessage(context, "Error: Doctor ID not found!");
+      return;
+    }
+
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => AppointmentScreen(
+          doctorId: docId,
           doctorName: data["doctorName"]?.toString() ?? "Doctor",
           specialty: data["specialty"]?.toString() ?? "General",
-          rating: data["rating"]?.toString() ?? "4.5",
-          available: data["available"]?.toString() ?? "Available",
+          doctorData: {
+            "name": data["doctorName"] ?? "Doctor",
+            "specialty": data["specialty"] ?? "General",
+            "slots": data["slots"] ?? [],
+            "rating": data["rating"] ?? "0.0",
+          },
         ),
       ),
     );
@@ -98,13 +104,15 @@ class PatientAppointmentsScreen extends StatelessWidget {
       backgroundColor: Colors.grey.shade100,
       appBar: AppBar(
         backgroundColor: mainColor,
-        title: const Text("My Appointments"),
+        title: const Text(
+          "My Appointments",
+          style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+        ),
         centerTitle: true,
+        iconTheme: const IconThemeData(color: Colors.black),
       ),
       body: user == null
-          ? const Center(
-              child: Text("Please login first"),
-            )
+          ? const Center(child: Text("Please login first"))
           : StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
               stream: FirebaseFirestore.instance
                   .collection("appointments")
@@ -120,7 +128,7 @@ class PatientAppointmentsScreen extends StatelessWidget {
 
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(
-                    child: CircularProgressIndicator(),
+                    child: CircularProgressIndicator(color: mainColor),
                   );
                 }
 
@@ -139,7 +147,6 @@ class PatientAppointmentsScreen extends StatelessWidget {
                   itemBuilder: (context, index) {
                     final doc = appointments[index];
                     final data = doc.data();
-
                     return buildAppointmentCard(
                       context: context,
                       appointmentId: doc.id,
@@ -163,7 +170,6 @@ class PatientAppointmentsScreen extends StatelessWidget {
     final timeSlot = data["timeSlot"]?.toString() ?? "";
     final note = data["note"]?.toString() ?? "";
     final status = data["status"]?.toString() ?? "pending";
-
     final active = isActiveAppointment(data);
 
     return Container(
@@ -181,10 +187,7 @@ class PatientAppointmentsScreen extends StatelessWidget {
             children: [
               const CircleAvatar(
                 backgroundColor: lightColor,
-                child: Icon(
-                  Icons.calendar_month,
-                  color: mainColor,
-                ),
+                child: Icon(Icons.calendar_month, color: mainColor),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -197,12 +200,9 @@ class PatientAppointmentsScreen extends StatelessWidget {
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 5,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                 decoration: BoxDecoration(
-                  color: statusColor(status).withOpacity(0.15),
+                  color: statusColor(status).withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
@@ -217,19 +217,22 @@ class PatientAppointmentsScreen extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 12),
-          Text("Specialty: $specialty"),
-          Text("Date: $appointmentDate"),
-          Text("Time: $timeSlot"),
-          if (note.isNotEmpty) Text("Note: $note"),
+          Text("Specialty: $specialty",
+              style: const TextStyle(color: Colors.black87)),
+          Text("Date: $appointmentDate",
+              style: const TextStyle(color: Colors.black87)),
+          Text("Time: $timeSlot",
+              style: const TextStyle(color: Colors.black87)),
+          if (note.isNotEmpty)
+            Text("Note: $note",
+                style: const TextStyle(color: Colors.black54)),
           const SizedBox(height: 14),
           if (active)
             Row(
               children: [
                 Expanded(
                   child: OutlinedButton.icon(
-                    onPressed: () {
-                      openRescheduleScreen(context, data);
-                    },
+                    onPressed: () => openRescheduleScreen(context, data),
                     icon: const Icon(Icons.edit_calendar),
                     label: const Text("Reschedule"),
                     style: OutlinedButton.styleFrom(
@@ -241,9 +244,7 @@ class PatientAppointmentsScreen extends StatelessWidget {
                 const SizedBox(width: 10),
                 Expanded(
                   child: ElevatedButton.icon(
-                    onPressed: () {
-                      cancelAppointment(context, appointmentId);
-                    },
+                    onPressed: () => cancelAppointment(context, appointmentId),
                     icon: const Icon(Icons.cancel),
                     label: const Text("Cancel"),
                     style: ElevatedButton.styleFrom(
@@ -258,9 +259,7 @@ class PatientAppointmentsScreen extends StatelessWidget {
             SizedBox(
               width: double.infinity,
               child: OutlinedButton.icon(
-                onPressed: () {
-                  deleteAppointment(context, appointmentId);
-                },
+                onPressed: () => deleteAppointment(context, appointmentId),
                 icon: const Icon(Icons.delete_outline),
                 label: const Text("Delete Record"),
                 style: OutlinedButton.styleFrom(
@@ -292,11 +291,7 @@ class PatientAppointmentsScreen extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(
-                Icons.info_outline,
-                color: mainColor,
-                size: 34,
-              ),
+              const Icon(Icons.info_outline, color: mainColor, size: 34),
               const SizedBox(height: 10),
               Text(
                 title,
@@ -309,10 +304,7 @@ class PatientAppointmentsScreen extends StatelessWidget {
               Text(
                 subtitle,
                 textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: Colors.black54,
-                  fontSize: 13,
-                ),
+                style: const TextStyle(color: Colors.black54, fontSize: 13),
               ),
             ],
           ),
