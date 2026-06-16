@@ -35,6 +35,8 @@ class DoctorInsightsScreen extends StatelessWidget {
     final completionRate = appointments.isEmpty
         ? 0
         : (completedAppointments / appointments.length * 100).round();
+    final averageConsultationMinutes =
+        AppData.instance.averageConsultationMinutesForDoctor(doctor.id);
 
     return Scaffold(
       appBar: AppBar(
@@ -98,7 +100,7 @@ class DoctorInsightsScreen extends StatelessWidget {
               ),
               buildInsightCard(
                 title: 'Average Time',
-                value: '${doctor.averageConsultationMinutes} min',
+                value: '$averageConsultationMinutes min',
                 icon: Icons.timer_outlined,
               ),
               buildInsightCard(
@@ -136,8 +138,9 @@ class DoctorInsightsScreen extends StatelessWidget {
                 ),
                 SizedBox(height: 9),
                 Text(
-                  'The values are calculated from appointment '
-                  'records stored in the DocMate demo system.',
+                  'The values are calculated from live appointment '
+                  'records stored in Firestore. Average time uses completed '
+                  'consultations when timing data is available.',
                   style: TextStyle(
                     color: Colors.white70,
                   ),

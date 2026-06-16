@@ -7,26 +7,25 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function userExists() {
+      return signedIn() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
     function userDoc() {
       return get(/databases/$(database)/documents/users/$(request.auth.uid));
     }
 
     function isAdmin() {
-      return signedIn() &&
-        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-        userDoc().data.role == 'admin';
+      return userExists() && userDoc().data.role == 'admin';
     }
 
     function isDoctor() {
-      return signedIn() &&
-        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-        userDoc().data.role == 'doctor';
+      return userExists() && userDoc().data.role == 'doctor';
     }
 
     function isPatient() {
-      return signedIn() &&
-        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-        userDoc().data.role == 'patient';
+      return userExists() && userDoc().data.role == 'patient';
     }
 
     match /users/{userId} {
@@ -98,11 +97,14 @@ service cloud.firestore {
         (isDoctor() && request.auth.uid in resource.data.doctorIds)
       );
 
-      allow create: if signedIn() &&
+      allow create: if isPatient() &&
         request.auth.uid == patientId &&
         request.resource.data.uid == patientId;
 
-      allow update: if signedIn() && request.auth.uid == patientId;
+      allow update: if isPatient() &&
+        request.auth.uid == patientId &&
+        request.resource.data.uid == patientId;
+
       allow delete: if isAdmin();
     }
 
@@ -144,6 +146,7 @@ service cloud.firestore {
           request.resource.data.diff(resource.data).affectedKeys().hasOnly([
             'status',
             'updatedAt',
+            'startedAt',
             'completedAt'
           ]) &&
           request.resource.data.status in [
@@ -161,7 +164,7 @@ service cloud.firestore {
     match /appointment_slots/{slotId} {
       allow read: if signedIn();
 
-      allow create: if signedIn() &&
+      allow create: if isPatient() &&
         request.resource.data.patientId == request.auth.uid;
 
       allow update: if isAdmin() ||
@@ -216,7 +219,11 @@ service cloud.firestore {
       allow read, update: if signedIn() && (
         resource.data.userId == request.auth.uid || isAdmin()
       );
-      allow create: if signedIn();
+      allow create: if signedIn() && (
+        request.resource.data.userId == request.auth.uid ||
+        isDoctor() ||
+        isAdmin()
+      );
       allow delete: if isAdmin();
     }
 
@@ -231,6 +238,8 @@ service cloud.firestore {
 
       allow create: if signedIn() &&
         request.resource.data.senderId == request.auth.uid &&
+        request.resource.data.participants is list &&
+        request.resource.data.participants.size() == 2 &&
         request.auth.uid in request.resource.data.participants &&
         request.resource.data.receiverId in request.resource.data.participants;
 
@@ -259,9 +268,9 @@ service cloud.firestore {
         resource.data.userId == request.auth.uid || isAdmin()
       );
       allow create: if signedIn() &&
-        request.resource.data.userId == request.auth.uid;
-      allow update: if isAdmin();
-      allow delete: if isAdmin();
+        request.resource.data.userId == request.auth.uid &&
+        request.resource.data.status == 'Open';
+      allow update, delete: if isAdmin();
     }
 
     match /hospitals/{hospitalId} {
@@ -274,12 +283,24 @@ service cloud.firestore {
       allow create, update, delete: if isAdmin();
     }
 
+    match /symptom_rules/{ruleId} {
+      allow read: if signedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
     match /reviews/{reviewId} {
       allow read: if signedIn();
-      allow create: if isPatient() &&
-        request.resource.data.patientId == request.auth.uid;
-      allow update, delete: if signedIn() &&
-        (resource.data.patientId == request.auth.uid || isAdmin());
+
+      allow create, update: if isPatient() &&
+        request.resource.data.patientId == request.auth.uid &&
+        request.resource.data.appointmentId == reviewId &&
+        exists(/databases/$(database)/documents/appointments/$(reviewId)) &&
+        get(/databases/$(database)/documents/appointments/$(reviewId)).data.patientId == request.auth.uid &&
+        get(/databases/$(database)/documents/appointments/$(reviewId)).data.doctorId == request.resource.data.doctorId &&
+        get(/databases/$(database)/documents/appointments/$(reviewId)).data.status == 'Completed';
+
+      allow delete: if isAdmin() ||
+        (isPatient() && resource.data.patientId == request.auth.uid);
     }
 
     match /{document=**} {

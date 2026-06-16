@@ -4,7 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:docmate/core/theme/app_theme.dart';
 import 'package:docmate/data/app_data.dart';
 import 'package:docmate/features/admin/screens/admin_doctors_screen.dart';
+import 'package:docmate/features/admin/screens/admin_emergency_requests_screen.dart';
 import 'package:docmate/features/admin/screens/admin_management_screens.dart';
+import 'package:docmate/features/admin/screens/admin_symptom_rules_screen.dart';
 import 'package:docmate/features/auth/screens/intro_screen.dart';
 
 class AdminHome extends StatelessWidget {
@@ -337,6 +339,16 @@ class AdminHome extends StatelessWidget {
         title: 'Announcements',
         icon: Icons.campaign,
         screen: AdminAnnouncementsScreen(),
+      ),
+      AdminManagementItem(
+        title: 'Emergency Requests',
+        icon: Icons.emergency,
+        screen: AdminEmergencyRequestsScreen(),
+      ),
+      AdminManagementItem(
+        title: 'Symptom Rules',
+        icon: Icons.psychology,
+        screen: AdminSymptomRulesScreen(),
       ),
     ];
 

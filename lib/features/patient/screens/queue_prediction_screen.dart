@@ -133,7 +133,7 @@ class _QueuePredictionScreenState extends State<QueuePredictionScreen> {
           const SizedBox(height: 8),
           buildInformationRow(
             'Average Consultation',
-            '${doctor.averageConsultationMinutes} minutes',
+            '${appData.averageConsultationMinutesForDoctor(doctor.id)} minutes',
           ),
         ],
       ),

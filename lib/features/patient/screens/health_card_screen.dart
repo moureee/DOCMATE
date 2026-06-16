@@ -22,7 +22,7 @@ class HealthCardScreen extends StatelessWidget {
           return ListView(
             padding: const EdgeInsets.all(18),
             children: [
-              buildMainCard(profile),
+              buildMainCard(profile, appData.currentPatientName),
               const SizedBox(height: 18),
               buildInformationCard(
                 icon: Icons.monitor_weight_outlined,
@@ -55,7 +55,11 @@ class HealthCardScreen extends StatelessWidget {
               buildInformationCard(
                 icon: Icons.history,
                 title: 'Last Visit',
-                value: formatDate(profile.lastVisit),
+                value: appData.lastCompletedVisitForCurrentPatient == null
+                    ? 'No completed visit recorded'
+                    : formatDate(
+                        appData.lastCompletedVisitForCurrentPatient!,
+                      ),
               ),
               const SizedBox(height: 14),
               buildHealthSuggestion(profile),
@@ -66,7 +70,10 @@ class HealthCardScreen extends StatelessWidget {
     );
   }
 
-  Widget buildMainCard(HealthProfileModel profile) {
+  Widget buildMainCard(
+    HealthProfileModel profile,
+    String patientName,
+  ) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(22),
@@ -91,9 +98,9 @@ class HealthCardScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 12),
-          const Text(
-            'Demo Patient',
-            style: TextStyle(
+          Text(
+            patientName.trim().isEmpty ? 'Patient' : patientName,
+            style: const TextStyle(
               fontSize: 22,
               fontWeight: FontWeight.bold,
             ),
@@ -213,7 +220,10 @@ class HealthCardScreen extends StatelessWidget {
   ) {
     String suggestion;
 
-    if (profile.bmi < 18.5) {
+    if (profile.bmi == 0) {
+      suggestion =
+          'Add your height and weight to receive a basic BMI-based suggestion.';
+    } else if (profile.bmi < 18.5) {
       suggestion = 'Your BMI is below the healthy range. Consider '
           'discussing nutrition with a healthcare professional.';
     } else if (profile.bmi < 25) {

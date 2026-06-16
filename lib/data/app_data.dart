@@ -179,6 +179,8 @@ class AppointmentModel {
     this.slotId = '',
     this.queueNumber = 0,
     DateTime? createdAt,
+    this.startedAt,
+    this.completedAt,
   }) : createdAt = createdAt ?? DateTime.now();
 
   final String id;
@@ -190,6 +192,8 @@ class AppointmentModel {
   final String slotId;
   final int queueNumber;
   final DateTime createdAt;
+  final DateTime? startedAt;
+  final DateTime? completedAt;
   DateTime date;
   String time;
   String symptoms;
@@ -218,7 +222,20 @@ class AppointmentModel {
       slotId: (data['slotId'] ?? '').toString(),
       queueNumber: _readInt(data['queueNumber']),
       createdAt: _readDate(data['createdAt'], fallback: DateTime.now()),
+      startedAt: data['startedAt'] == null
+          ? null
+          : _readDate(data['startedAt'], fallback: DateTime.now()),
+      completedAt: data['completedAt'] == null
+          ? null
+          : _readDate(data['completedAt'], fallback: DateTime.now()),
     );
+  }
+
+  int? get consultationMinutes {
+    if (startedAt == null || completedAt == null) return null;
+    final minutes = completedAt!.difference(startedAt!).inMinutes;
+    if (minutes <= 0 || minutes > 240) return null;
+    return minutes;
   }
 }
 
@@ -486,6 +503,77 @@ class HospitalModel {
   }
 }
 
+class SymptomRuleModel {
+  SymptomRuleModel({
+    required this.id,
+    required this.symptoms,
+    required this.department,
+    required this.urgency,
+    required this.advice,
+    this.enabled = true,
+  });
+
+  final String id;
+  final List<String> symptoms;
+  final String department;
+  final String urgency;
+  final String advice;
+  final bool enabled;
+
+  factory SymptomRuleModel.fromFirestore(
+    QueryDocumentSnapshot<Map<String, dynamic>> document,
+  ) {
+    final data = document.data();
+    return SymptomRuleModel(
+      id: document.id,
+      symptoms: _readStringList(data['symptoms']),
+      department: (data['department'] ?? 'General Medicine').toString(),
+      urgency: (data['urgency'] ?? 'Routine').toString(),
+      advice: (data['advice'] ?? '').toString(),
+      enabled: data['enabled'] != false,
+    );
+  }
+}
+
+class EmergencyRequestModel {
+  EmergencyRequestModel({
+    required this.id,
+    required this.userId,
+    required this.userName,
+    required this.role,
+    required this.status,
+    required this.createdAt,
+    this.latitude,
+    this.longitude,
+  });
+
+  final String id;
+  final String userId;
+  final String userName;
+  final String role;
+  final String status;
+  final DateTime createdAt;
+  final double? latitude;
+  final double? longitude;
+
+  factory EmergencyRequestModel.fromFirestore(
+    QueryDocumentSnapshot<Map<String, dynamic>> document,
+  ) {
+    final data = document.data();
+    return EmergencyRequestModel(
+      id: document.id,
+      userId: (data['userId'] ?? '').toString(),
+      userName: (data['userName'] ?? 'User').toString(),
+      role: (data['role'] ?? '').toString(),
+      status: (data['status'] ?? 'Open').toString(),
+      createdAt: _readDate(data['createdAt'], fallback: DateTime.now()),
+      latitude: data['latitude'] == null ? null : _readDouble(data['latitude']),
+      longitude:
+          data['longitude'] == null ? null : _readDouble(data['longitude']),
+    );
+  }
+}
+
 class AppData extends ChangeNotifier {
   AppData._() {
     _authSubscription = FirebaseAuth.instance.authStateChanges().listen(
@@ -519,6 +607,9 @@ class AppData extends ChangeNotifier {
   final List<TimelineItem> timeline = <TimelineItem>[];
   final List<NotificationModel> notifications = <NotificationModel>[];
   final List<HospitalModel> hospitals = <HospitalModel>[];
+  final List<SymptomRuleModel> symptomRules = <SymptomRuleModel>[];
+  final List<EmergencyRequestModel> emergencyRequests =
+      <EmergencyRequestModel>[];
 
   final Set<String> _favoriteDoctorIds = <String>{};
   final Map<String, String> _patientIdByName = <String, String>{};
@@ -612,6 +703,7 @@ class AppData extends ChangeNotifier {
     _startDoctorListener();
     _startHospitalListener();
     _startReviewListener();
+    _startSymptomRulesListener();
   }
 
   Future<void> _cancelDataSubscriptions() async {
@@ -631,6 +723,8 @@ class AppData extends ChangeNotifier {
     timeline.clear();
     notifications.clear();
     hospitals.clear();
+    symptomRules.clear();
+    emergencyRequests.clear();
     _favoriteDoctorIds.clear();
     _patientIdByName.clear();
     _profilesByPatientId.clear();
@@ -668,7 +762,7 @@ class AppData extends ChangeNotifier {
 
     if (currentUserRole == 'admin') {
       _startAdminUsersListener();
-      _startEmergencyCountListener();
+      _startEmergencyRequestsListener();
     }
   }
 
@@ -759,6 +853,107 @@ class AppData extends ChangeNotifier {
           (first, second) => first.name.toLowerCase().compareTo(
                 second.name.toLowerCase(),
               ),
+        );
+        notifyListeners();
+      },
+      onError: (_) {},
+    );
+    _subscriptions.add(subscription);
+  }
+
+  List<SymptomRuleModel> get _defaultSymptomRules {
+    return <SymptomRuleModel>[
+      SymptomRuleModel(
+        id: 'default_cardiology',
+        symptoms: <String>[
+          'Chest pain',
+          'Breathing difficulty',
+          'Fast heartbeat',
+        ],
+        department: 'Cardiology',
+        urgency: 'Urgent',
+        advice:
+            'Chest or breathing symptoms may require urgent professional assessment.',
+      ),
+      SymptomRuleModel(
+        id: 'default_dermatology',
+        symptoms: <String>['Skin rash', 'Skin itching'],
+        department: 'Dermatology',
+        urgency: 'Routine',
+        advice:
+            'Avoid known irritants and arrange a consultation if symptoms continue.',
+      ),
+      SymptomRuleModel(
+        id: 'default_orthopedics',
+        symptoms: <String>['Joint pain', 'Back pain'],
+        department: 'Orthopedics',
+        urgency: 'Routine',
+        advice:
+            'Limit activities that worsen the pain and seek professional guidance if it persists.',
+      ),
+      SymptomRuleModel(
+        id: 'default_gastroenterology',
+        symptoms: <String>['Stomach pain', 'Vomiting'],
+        department: 'Gastroenterology',
+        urgency: 'Priority',
+        advice:
+            'Maintain hydration and seek medical advice if symptoms are severe or persistent.',
+      ),
+      SymptomRuleModel(
+        id: 'default_general',
+        symptoms: <String>['Fever', 'Headache', 'Cough', 'Weakness'],
+        department: 'General Medicine',
+        urgency: 'Routine',
+        advice:
+            'Rest, stay hydrated, and consult a qualified professional if symptoms continue or worsen.',
+      ),
+    ];
+  }
+
+  List<SymptomRuleModel> get effectiveSymptomRules {
+    final enabledRules = symptomRules.where((rule) => rule.enabled).toList();
+    return enabledRules.isEmpty ? _defaultSymptomRules : enabledRules;
+  }
+
+  List<String> get availableSymptoms {
+    final result = effectiveSymptomRules
+        .expand((rule) => rule.symptoms)
+        .map((symptom) => symptom.trim())
+        .where((symptom) => symptom.isNotEmpty)
+        .toSet()
+        .toList();
+    result.sort((first, second) => first.compareTo(second));
+    return result;
+  }
+
+  SymptomRuleModel? matchingSymptomRule(List<String> selectedSymptoms) {
+    if (selectedSymptoms.isEmpty) return null;
+    final selected =
+        selectedSymptoms.map((symptom) => symptom.toLowerCase().trim()).toSet();
+
+    SymptomRuleModel? bestRule;
+    var bestMatches = 0;
+    for (final rule in effectiveSymptomRules) {
+      final matches = rule.symptoms.where((symptom) {
+        return selected.contains(symptom.toLowerCase().trim());
+      }).length;
+      if (matches > bestMatches) {
+        bestMatches = matches;
+        bestRule = rule;
+      }
+    }
+    return bestRule;
+  }
+
+  void _startSymptomRulesListener() {
+    final subscription =
+        _firestore.collection('symptom_rules').snapshots().listen(
+      (snapshot) {
+        symptomRules
+          ..clear()
+          ..addAll(snapshot.docs.map(SymptomRuleModel.fromFirestore));
+        symptomRules.sort(
+          (first, second) => first.department.compareTo(second.department),
         );
         notifyListeners();
       },
@@ -945,11 +1140,17 @@ class AppData extends ChangeNotifier {
     _subscriptions.add(subscription);
   }
 
-  void _startEmergencyCountListener() {
+  void _startEmergencyRequestsListener() {
     final subscription =
         _firestore.collection('emergency_requests').snapshots().listen(
       (snapshot) {
-        emergencyRequestCount = snapshot.docs.length;
+        emergencyRequests
+          ..clear()
+          ..addAll(snapshot.docs.map(EmergencyRequestModel.fromFirestore));
+        emergencyRequests.sort(
+          (first, second) => second.createdAt.compareTo(first.createdAt),
+        );
+        emergencyRequestCount = emergencyRequests.length;
         notifyListeners();
       },
       onError: (_) {},
@@ -1028,11 +1229,6 @@ class AppData extends ChangeNotifier {
         partnerId = appointment.doctorId;
         partnerName = appointment.doctorName;
         subtitle = appointment.specialty;
-      } else if (approvedDoctors.isNotEmpty) {
-        final doctor = approvedDoctors.first;
-        partnerId = doctor.id;
-        partnerName = doctor.name;
-        subtitle = doctor.specialty;
       }
     } else if (currentUserRole == 'doctor') {
       final eligible = appointments.where((appointment) {
@@ -1143,70 +1339,70 @@ class AppData extends ChangeNotifier {
     return result;
   }
 
+  int averageConsultationMinutesForDoctor(String doctorId) {
+    final measured = appointments
+        .where((appointment) => appointment.doctorId == doctorId)
+        .map((appointment) => appointment.consultationMinutes)
+        .whereType<int>()
+        .toList();
+    if (measured.isEmpty) {
+      for (final doctor in doctors) {
+        if (doctor.id == doctorId) {
+          return doctor.averageConsultationMinutes <= 0
+              ? 12
+              : doctor.averageConsultationMinutes;
+        }
+      }
+      return 12;
+    }
+    final total =
+        measured.fold<int>(0, (runningTotal, item) => runningTotal + item);
+    return (total / measured.length).round();
+  }
+
+  DateTime? get lastCompletedVisitForCurrentPatient {
+    final completed = appointments
+        .where((appointment) => appointment.status == 'Completed')
+        .toList();
+    if (completed.isEmpty) return null;
+    completed.sort((first, second) => second.date.compareTo(first.date));
+    return completed.first.completedAt ?? completed.first.date;
+  }
+
   int predictedQueueMinutes(DoctorModel doctor) {
-    final consultationTime = doctor.averageConsultationMinutes <= 0
-        ? 12
-        : doctor.averageConsultationMinutes;
+    final consultationTime = averageConsultationMinutesForDoctor(doctor.id);
     if (doctor.queueLength == 0) return 0;
     return doctor.queueLength * consultationTime;
   }
 
   String suggestDepartment(List<String> selectedSymptoms) {
     if (selectedSymptoms.isEmpty) return 'Please select symptoms';
-    final symptoms =
-        selectedSymptoms.map((item) => item.toLowerCase()).toList();
+    return matchingSymptomRule(selectedSymptoms)?.department ??
+        'General Medicine';
+  }
 
-    if (symptoms.any(
-      (item) => item.contains('chest') || item.contains('heartbeat'),
-    )) {
-      return 'Cardiology';
-    }
-    if (symptoms.any(
-      (item) =>
-          item.contains('skin') ||
-          item.contains('rash') ||
-          item.contains('itch'),
-    )) {
-      return 'Dermatology';
-    }
-    if (symptoms.any(
-      (item) =>
-          item.contains('joint') ||
-          item.contains('bone') ||
-          item.contains('back'),
-    )) {
-      return 'Orthopedics';
-    }
-    if (symptoms.any(
-      (item) =>
-          item.contains('stomach') ||
-          item.contains('vomit') ||
-          item.contains('digestion'),
-    )) {
-      return 'Gastroenterology';
-    }
-    if (symptoms.any(
-      (item) => item.contains('eye') || item.contains('vision'),
-    )) {
-      return 'Ophthalmology';
-    }
-    return 'General Medicine';
+  String symptomUrgency(List<String> selectedSymptoms) {
+    return matchingSymptomRule(selectedSymptoms)?.urgency ?? 'Routine';
   }
 
   String healthSuggestion(List<String> selectedSymptoms) {
-    final symptoms =
-        selectedSymptoms.map((item) => item.toLowerCase()).toList();
-    if (symptoms.any(
-      (item) => item.contains('chest pain') || item.contains('breathing'),
-    )) {
-      return 'Urgent attention may be required. Contact emergency support or a qualified doctor.';
+    final rule = matchingSymptomRule(selectedSymptoms);
+    final urgency = rule?.urgency.toLowerCase() ?? '';
+
+    if (urgency == 'emergency' || urgency == 'urgent') {
+      return rule?.advice.isNotEmpty == true
+          ? rule!.advice
+          : 'Urgent attention may be required. Contact emergency support or a qualified doctor.';
     }
     if (healthProfile.bmi >= 30) {
-      return 'Your BMI is high. Discuss a safe health plan with a qualified healthcare professional.';
+      return 'Your BMI is high. Discuss a safe health plan with a qualified healthcare professional. ${rule?.advice ?? ''}'
+          .trim();
     }
     if (healthProfile.bmi > 0 && healthProfile.bmi < 18.5) {
-      return 'Your BMI is below the healthy range. Consider discussing nutrition with a healthcare professional.';
+      return 'Your BMI is below the healthy range. Consider discussing nutrition with a healthcare professional. ${rule?.advice ?? ''}'
+          .trim();
     }
+    if (rule != null && rule.advice.isNotEmpty) return rule.advice;
     return 'This is educational decision support, not a diagnosis. Continue healthy habits and consult a doctor when needed.';
   }
 
@@ -1437,6 +1633,8 @@ class AppData extends ChangeNotifier {
     batch.update(reference, {
       'status': status,
       'updatedAt': FieldValue.serverTimestamp(),
+      if (status == 'In Consultation')
+        'startedAt': FieldValue.serverTimestamp(),
       if (status == 'Completed') 'completedAt': FieldValue.serverTimestamp(),
     });
 
@@ -1671,6 +1869,84 @@ class AppData extends ChangeNotifier {
       'updatedAt': FieldValue.serverTimestamp(),
     });
     await batch.commit();
+  }
+
+  Future<void> saveSymptomRule({
+    String? ruleId,
+    required List<String> symptoms,
+    required String department,
+    required String urgency,
+    required String advice,
+    bool enabled = true,
+  }) async {
+    if (currentUserRole != 'admin') {
+      throw StateError('Only an administrator can manage symptom rules.');
+    }
+    final cleanedSymptoms = symptoms
+        .map((symptom) => symptom.trim())
+        .where((symptom) => symptom.isNotEmpty)
+        .toSet()
+        .toList();
+    if (cleanedSymptoms.isEmpty || department.trim().isEmpty) {
+      throw StateError('Symptoms and department are required.');
+    }
+    final reference = ruleId == null || ruleId.isEmpty
+        ? _firestore.collection('symptom_rules').doc()
+        : _firestore.collection('symptom_rules').doc(ruleId);
+    await reference.set({
+      'symptoms': cleanedSymptoms,
+      'department': department.trim(),
+      'urgency': urgency.trim().isEmpty ? 'Routine' : urgency.trim(),
+      'advice': advice.trim(),
+      'enabled': enabled,
+      'updatedAt': FieldValue.serverTimestamp(),
+      if (ruleId == null || ruleId.isEmpty)
+        'createdAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+  }
+
+  Future<void> deleteSymptomRule(String ruleId) async {
+    if (currentUserRole != 'admin') {
+      throw StateError('Only an administrator can manage symptom rules.');
+    }
+    await _firestore.collection('symptom_rules').doc(ruleId).delete();
+  }
+
+  Future<void> seedDefaultSymptomRules() async {
+    if (currentUserRole != 'admin') {
+      throw StateError('Only an administrator can manage symptom rules.');
+    }
+    final batch = _firestore.batch();
+    for (final rule in _defaultSymptomRules) {
+      batch.set(
+        _firestore.collection('symptom_rules').doc(rule.id),
+        {
+          'symptoms': rule.symptoms,
+          'department': rule.department,
+          'urgency': rule.urgency,
+          'advice': rule.advice,
+          'enabled': true,
+          'createdAt': FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        },
+        SetOptions(merge: true),
+      );
+    }
+    await batch.commit();
+  }
+
+  Future<void> updateEmergencyRequestStatus({
+    required String requestId,
+    required String status,
+  }) async {
+    if (currentUserRole != 'admin') {
+      throw StateError('Only an administrator can update emergency requests.');
+    }
+    await _firestore.collection('emergency_requests').doc(requestId).update({
+      'status': status,
+      'updatedAt': FieldValue.serverTimestamp(),
+      'handledBy': currentUserId,
+    });
   }
 
   Future<void> sendAnnouncement(String message) async {
