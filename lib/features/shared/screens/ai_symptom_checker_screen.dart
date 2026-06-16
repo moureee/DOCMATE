@@ -12,29 +12,29 @@ class AiSymptomCheckerScreen extends StatefulWidget {
 }
 
 class _AiSymptomCheckerScreenState extends State<AiSymptomCheckerScreen> {
-  final List<String> symptoms = [
-    'Fever',
-    'Headache',
-    'Cough',
-    'Weakness',
-    'Chest pain',
-    'Breathing difficulty',
-    'Fast heartbeat',
-    'Skin rash',
-    'Skin itching',
-    'Joint pain',
-    'Back pain',
-    'Stomach pain',
-    'Vomiting',
-  ];
+  final Set<String> selectedSymptoms = <String>{};
+  final TextEditingController symptomSearchController = TextEditingController();
 
-  final Set<String> selectedSymptoms = {};
+  String symptomQuery = '';
 
   String? suggestedDepartment;
+  String? urgency;
   String? healthSuggestion;
   DoctorModel? recommendedDoctor;
 
-  void checkSymptoms() {
+  @override
+  void dispose() {
+    symptomSearchController.dispose();
+    super.dispose();
+  }
+
+  void searchSymptoms() {
+    setState(() {
+      symptomQuery = symptomSearchController.text.trim().toLowerCase();
+    });
+  }
+
+  void checkSymptoms(AppData appData) {
     if (selectedSymptoms.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -44,25 +44,22 @@ class _AiSymptomCheckerScreenState extends State<AiSymptomCheckerScreen> {
       return;
     }
 
-    final appData = AppData.instance;
     final selected = selectedSymptoms.toList();
-
     final department = appData.suggestDepartment(selected);
 
     DoctorModel? doctor;
-
     for (final item in appData.rankedDoctors) {
-      if (item.specialty == department) {
+      if (item.specialty.toLowerCase() == department.toLowerCase()) {
         doctor = item;
         break;
       }
     }
-
     doctor ??=
         appData.rankedDoctors.isNotEmpty ? appData.rankedDoctors.first : null;
 
     setState(() {
       suggestedDepartment = department;
+      urgency = appData.symptomUrgency(selected);
       healthSuggestion = appData.healthSuggestion(selected);
       recommendedDoctor = doctor;
     });
@@ -71,7 +68,10 @@ class _AiSymptomCheckerScreenState extends State<AiSymptomCheckerScreen> {
   void clearSymptoms() {
     setState(() {
       selectedSymptoms.clear();
+      symptomSearchController.clear();
+      symptomQuery = '';
       suggestedDepartment = null;
+      urgency = null;
       healthSuggestion = null;
       recommendedDoctor = null;
     });
@@ -79,6 +79,8 @@ class _AiSymptomCheckerScreenState extends State<AiSymptomCheckerScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final appData = AppData.instance;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('AI Symptom Checker'),
@@ -90,64 +92,118 @@ class _AiSymptomCheckerScreenState extends State<AiSymptomCheckerScreen> {
           ),
         ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            buildIntroductionCard(),
-            const SizedBox(height: 22),
-            const Text(
-              'Select Your Symptoms',
-              style: TextStyle(
-                fontSize: 19,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 9,
-              runSpacing: 9,
-              children: symptoms.map((symptom) {
-                final selected = selectedSymptoms.contains(symptom);
+      body: AnimatedBuilder(
+        animation: appData,
+        builder: (context, child) {
+          final allSymptoms = appData.availableSymptoms;
+          final symptoms = symptomQuery.isEmpty
+              ? allSymptoms
+              : allSymptoms.where((symptom) {
+                  return symptom.toLowerCase().contains(symptomQuery);
+                }).toList();
+          selectedSymptoms.removeWhere(
+            (symptom) => !allSymptoms.contains(symptom),
+          );
 
-                return FilterChip(
-                  label: Text(symptom),
-                  selected: selected,
-                  selectedColor: AppColors.primary,
-                  checkmarkColor: AppColors.dark,
-                  onSelected: (value) {
-                    setState(() {
-                      if (value) {
-                        selectedSymptoms.add(symptom);
-                      } else {
-                        selectedSymptoms.remove(symptom);
-                      }
-                    });
-                  },
-                );
-              }).toList(),
+          return SingleChildScrollView(
+            padding: const EdgeInsets.all(18),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                buildIntroductionCard(appData),
+                const SizedBox(height: 22),
+                const Text(
+                  'Select Your Symptoms',
+                  style: TextStyle(
+                    fontSize: 19,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: symptomSearchController,
+                        textInputAction: TextInputAction.search,
+                        onSubmitted: (_) => searchSymptoms(),
+                        decoration: InputDecoration(
+                          hintText: 'Search symptoms, e.g. fever',
+                          prefixIcon: const Icon(Icons.search),
+                          suffixIcon: symptomSearchController.text.isEmpty
+                              ? null
+                              : IconButton(
+                                  onPressed: () {
+                                    symptomSearchController.clear();
+                                    searchSymptoms();
+                                  },
+                                  icon: const Icon(Icons.close),
+                                ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    ElevatedButton.icon(
+                      onPressed: searchSymptoms,
+                      icon: const Icon(Icons.search),
+                      label: const Text('Search'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                if (symptoms.isEmpty)
+                  Text(symptomQuery.isEmpty
+                      ? 'No symptom rules are currently available.'
+                      : 'No symptoms match your search.')
+                else
+                  Wrap(
+                    spacing: 9,
+                    runSpacing: 9,
+                    children: symptoms.map((symptom) {
+                      final selected = selectedSymptoms.contains(symptom);
+
+                      return FilterChip(
+                        label: Text(symptom),
+                        selected: selected,
+                        selectedColor: AppColors.primary,
+                        checkmarkColor: AppColors.dark,
+                        onSelected: (value) {
+                          setState(() {
+                            if (value) {
+                              selectedSymptoms.add(symptom);
+                            } else {
+                              selectedSymptoms.remove(symptom);
+                            }
+                          });
+                        },
+                      );
+                    }).toList(),
+                  ),
+                const SizedBox(height: 24),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed:
+                        symptoms.isEmpty ? null : () => checkSymptoms(appData),
+                    icon: const Icon(Icons.psychology),
+                    label: const Text('Check Symptoms'),
+                  ),
+                ),
+                if (suggestedDepartment != null) ...[
+                  const SizedBox(height: 24),
+                  buildResultCard(appData),
+                ],
+              ],
             ),
-            const SizedBox(height: 24),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: checkSymptoms,
-                icon: const Icon(Icons.psychology),
-                label: const Text('Check Symptoms'),
-              ),
-            ),
-            if (suggestedDepartment != null) ...[
-              const SizedBox(height: 24),
-              buildResultCard(),
-            ],
-          ],
-        ),
+          );
+        },
       ),
     );
   }
 
-  Widget buildIntroductionCard() {
+  Widget buildIntroductionCard(AppData appData) {
+    final usingFirestoreRules = appData.symptomRules.isNotEmpty;
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
@@ -155,40 +211,44 @@ class _AiSymptomCheckerScreenState extends State<AiSymptomCheckerScreen> {
         color: AppColors.primary,
         borderRadius: BorderRadius.circular(22),
       ),
-      child: const Column(
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(
+          const Icon(
             Icons.smart_toy_outlined,
             size: 42,
           ),
-          SizedBox(height: 10),
-          Text(
+          const SizedBox(height: 10),
+          const Text(
             'Smart Department Suggestion',
             style: TextStyle(
               fontSize: 19,
               fontWeight: FontWeight.bold,
             ),
           ),
-          SizedBox(height: 7),
-          Text(
-            'Select symptoms to receive a rule-based department '
+          const SizedBox(height: 7),
+          const Text(
+            'Select symptoms to receive a rule-based department, urgency, '
             'and doctor suggestion.',
           ),
-          SizedBox(height: 8),
+          const SizedBox(height: 8),
           Text(
-            'This feature is for demonstration only and does not '
-            'provide a medical diagnosis.',
-            style: TextStyle(
-              fontSize: 12,
-            ),
+            usingFirestoreRules
+                ? 'Rules are loaded from the DocMate database.'
+                : 'Default rules are being used until an administrator adds database rules.',
+            style: const TextStyle(fontSize: 12),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'Educational decision support only. This is not a medical diagnosis.',
+            style: TextStyle(fontSize: 12),
           ),
         ],
       ),
     );
   }
 
-  Widget buildResultCard() {
+  Widget buildResultCard(AppData appData) {
     final doctor = recommendedDoctor;
 
     return Container(
@@ -228,6 +288,11 @@ class _AiSymptomCheckerScreenState extends State<AiSymptomCheckerScreen> {
           ),
           const SizedBox(height: 14),
           buildResultSection(
+            title: 'Urgency',
+            value: urgency ?? 'Routine',
+          ),
+          const SizedBox(height: 14),
+          buildResultSection(
             title: 'Health Suggestion',
             value: healthSuggestion ?? '',
           ),
@@ -235,9 +300,7 @@ class _AiSymptomCheckerScreenState extends State<AiSymptomCheckerScreen> {
             const Divider(height: 30),
             const Text(
               'Recommended Doctor',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-              ),
+              style: TextStyle(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 10),
             ListTile(
@@ -251,14 +314,12 @@ class _AiSymptomCheckerScreenState extends State<AiSymptomCheckerScreen> {
               ),
               title: Text(
                 doctor.name,
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                ),
+                style: const TextStyle(fontWeight: FontWeight.bold),
               ),
               subtitle: Text(
                 '${doctor.specialty}\n'
-                'Rating: ${doctor.rating} • '
-                'Queue: ${AppData.instance.predictedQueueMinutes(doctor)} minutes',
+                'Rating: ${doctor.rating.toStringAsFixed(1)} • '
+                'Queue: ${appData.predictedQueueMinutes(doctor)} minutes',
               ),
               isThreeLine: true,
               trailing: const Icon(
@@ -275,12 +336,20 @@ class _AiSymptomCheckerScreenState extends State<AiSymptomCheckerScreen> {
                         doctorName: doctor.name,
                         specialty: doctor.specialty,
                         rating: doctor.rating.toString(),
-                        available: doctor.availableSlots.join(', '),
+                        available: doctor.availableSlots
+                            .map(availabilitySlotLabel)
+                            .join(', '),
                       );
                     },
                   ),
                 );
               },
+            ),
+          ] else ...[
+            const Divider(height: 30),
+            const Text(
+              'No approved doctor currently matches this suggestion.',
+              style: TextStyle(color: Colors.black54),
             ),
           ],
         ],
@@ -297,16 +366,12 @@ class _AiSymptomCheckerScreenState extends State<AiSymptomCheckerScreen> {
       children: [
         Text(
           title,
-          style: const TextStyle(
-            color: Colors.black54,
-          ),
+          style: const TextStyle(color: Colors.black54),
         ),
         const SizedBox(height: 4),
         Text(
           value,
-          style: const TextStyle(
-            fontWeight: FontWeight.bold,
-          ),
+          style: const TextStyle(fontWeight: FontWeight.bold),
         ),
       ],
     );

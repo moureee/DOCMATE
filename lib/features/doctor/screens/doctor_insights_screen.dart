@@ -13,9 +13,13 @@ class DoctorInsightsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final now = DateTime.now();
     final appointments = AppData.instance.appointments.where(
       (appointment) {
-        return appointment.doctorId == doctor.id;
+        final isToday = appointment.date.year == now.year &&
+            appointment.date.month == now.month &&
+            appointment.date.day == now.day;
+        return appointment.doctorId == doctor.id && isToday;
       },
     ).toList();
 
@@ -35,10 +39,18 @@ class DoctorInsightsScreen extends StatelessWidget {
     final completionRate = appointments.isEmpty
         ? 0
         : (completedAppointments / appointments.length * 100).round();
+    final measuredTimes = appointments
+        .map((appointment) => appointment.consultationMinutes)
+        .whereType<int>()
+        .toList();
+    final averageConsultationMinutes = measuredTimes.isEmpty
+        ? doctor.averageConsultationMinutes
+        : (measuredTimes.reduce((a, b) => a + b) / measuredTimes.length)
+            .round();
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Doctor Insights'),
+        title: const Text("Today's Insights"),
       ),
       body: ListView(
         padding: const EdgeInsets.all(18),
@@ -77,28 +89,28 @@ class DoctorInsightsScreen extends StatelessWidget {
             childAspectRatio: 1.15,
             children: [
               buildInsightCard(
-                title: 'Total Patients',
+                title: "Today's Patients",
                 value: uniquePatients.toString(),
                 icon: Icons.people,
               ),
               buildInsightCard(
-                title: 'Appointments',
+                title: "Today's Appointments",
                 value: appointments.length.toString(),
                 icon: Icons.calendar_month,
               ),
               buildInsightCard(
-                title: 'Pending',
+                title: "Today's Pending",
                 value: pendingAppointments.toString(),
                 icon: Icons.pending_actions,
               ),
               buildInsightCard(
-                title: 'Completed',
+                title: "Today's Completed",
                 value: completedAppointments.toString(),
                 icon: Icons.task_alt,
               ),
               buildInsightCard(
                 title: 'Average Time',
-                value: '${doctor.averageConsultationMinutes} min',
+                value: '$averageConsultationMinutes min',
                 icon: Icons.timer_outlined,
               ),
               buildInsightCard(
@@ -136,8 +148,9 @@ class DoctorInsightsScreen extends StatelessWidget {
                 ),
                 SizedBox(height: 9),
                 Text(
-                  'The values are calculated from appointment '
-                  'records stored in the DocMate demo system.',
+                  'The values show today only and are calculated from live appointment '
+                  'records stored in Firestore. Average time uses completed '
+                  'consultations when timing data is available.',
                   style: TextStyle(
                     color: Colors.white70,
                   ),

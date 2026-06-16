@@ -7,6 +7,7 @@ import 'package:docmate/features/doctor/screens/doctor_availability_screen.dart'
 import 'package:docmate/features/doctor/screens/doctor_insights_screen.dart';
 import 'package:docmate/features/doctor/screens/doctor_patient_info_screen.dart';
 import 'package:docmate/features/doctor/screens/prescription_management_screen.dart';
+import 'package:docmate/features/shared/screens/chat_screen.dart';
 
 class DoctorHome extends StatelessWidget {
   const DoctorHome({super.key});
@@ -81,11 +82,31 @@ class DoctorHome extends StatelessWidget {
               return appointment.doctorId == doctor.id;
             }).toList();
 
-            final pendingCount = appointments.where((appointment) {
-              return appointment.status == 'Pending';
+            final now = DateTime.now();
+            bool isToday(DateTime date) {
+              return date.year == now.year &&
+                  date.month == now.month &&
+                  date.day == now.day;
+            }
+
+            final todayAppointments = appointments.where((appointment) {
+              return isToday(appointment.date);
+            }).toList();
+
+            final todayPatientCount = todayAppointments
+                .map((appointment) => appointment.patientId.isEmpty
+                    ? appointment.patientName
+                    : appointment.patientId)
+                .toSet()
+                .length;
+
+            final pendingCount = todayAppointments.where((appointment) {
+              return appointment.status == 'Pending' ||
+                  appointment.status == 'Accepted' ||
+                  appointment.status == 'In Consultation';
             }).length;
 
-            final completedCount = appointments.where((appointment) {
+            final completedCount = todayAppointments.where((appointment) {
               return appointment.status == 'Completed';
             }).length;
 
@@ -97,7 +118,7 @@ class DoctorHome extends StatelessWidget {
                   buildHeader(doctor),
                   const SizedBox(height: 22),
                   buildStatistics(
-                    totalAppointments: appointments.length,
+                    todayPatients: todayPatientCount,
                     pendingAppointments: pendingCount,
                     completedAppointments: completedCount,
                   ),
@@ -188,7 +209,7 @@ class DoctorHome extends StatelessWidget {
   }
 
   Widget buildStatistics({
-    required int totalAppointments,
+    required int todayPatients,
     required int pendingAppointments,
     required int completedAppointments,
   }) {
@@ -196,15 +217,15 @@ class DoctorHome extends StatelessWidget {
       children: [
         Expanded(
           child: buildStatCard(
-            title: 'Patients',
-            value: totalAppointments.toString(),
+            title: "Today's Patients",
+            value: todayPatients.toString(),
             icon: Icons.people,
           ),
         ),
         const SizedBox(width: 10),
         Expanded(
           child: buildStatCard(
-            title: 'Pending',
+            title: "Today's Pending",
             value: pendingAppointments.toString(),
             icon: Icons.pending_actions,
           ),
@@ -212,7 +233,7 @@ class DoctorHome extends StatelessWidget {
         const SizedBox(width: 10),
         Expanded(
           child: buildStatCard(
-            title: 'Completed',
+            title: "Today's Completed",
             value: completedAppointments.toString(),
             icon: Icons.task_alt,
           ),
@@ -306,6 +327,12 @@ class DoctorHome extends StatelessWidget {
           screen: DoctorPatientInfoScreen(
             doctor: doctor,
           ),
+        ),
+        buildServiceCard(
+          context: context,
+          title: 'Patient Chat',
+          icon: Icons.chat_bubble_outline,
+          screen: const ChatScreen(),
         ),
         buildServiceCard(
           context: context,

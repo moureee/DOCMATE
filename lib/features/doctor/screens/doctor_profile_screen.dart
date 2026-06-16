@@ -38,10 +38,7 @@ class _DoctorProfileScreenState extends State<DoctorProfileScreen> {
           rating: double.tryParse(widget.rating) ?? 0,
           reviews: 0,
           experience: 5,
-          availableSlots: [
-            '10:00 AM',
-            '12:00 PM',
-          ],
+          availableSlots: const <String>[],
           queueLength: 0,
         );
       },
@@ -108,7 +105,11 @@ class _DoctorProfileScreenState extends State<DoctorProfileScreen> {
             buildInformationCard(
               icon: Icons.schedule,
               title: 'Available Slots',
-              value: currentDoctor.availableSlots.join(', '),
+              value: currentDoctor.availableSlots.isEmpty
+                  ? 'No availability added'
+                  : currentDoctor.availableSlots
+                      .map(availabilitySlotLabel)
+                      .join(', '),
             ),
             buildInformationCard(
               icon: Icons.hourglass_bottom,

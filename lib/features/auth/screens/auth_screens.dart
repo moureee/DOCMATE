@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart';
+﻿import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -7,6 +7,44 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:docmate/features/patient/screens/patient_home.dart';
 import 'package:docmate/features/doctor/screens/doctor_home.dart';
 import 'package:docmate/features/admin/screens/admin_home.dart';
+import 'package:docmate/core/utils/auth_validators.dart';
+
+String friendlyAuthMessage(FirebaseAuthException error) {
+  switch (error.code) {
+    case 'invalid-email':
+      return 'Enter a valid email address.';
+    case 'weak-password':
+      return AuthValidators.passwordHelp;
+    case 'email-already-in-use':
+      return 'An account already exists for this email.';
+    case 'user-not-found':
+    case 'wrong-password':
+    case 'invalid-credential':
+      return 'The email or password is incorrect.';
+    case 'invalid-phone-number':
+      return 'Enter a valid international phone number, for example +8801XXXXXXXXX.';
+    case 'missing-phone-number':
+      return 'Enter your phone number with the country code.';
+    case 'quota-exceeded':
+      return 'The SMS quota has been reached. Use a Firebase test number or try again later.';
+    case 'too-many-requests':
+      return 'Too many attempts. Please wait before trying again.';
+    case 'captcha-check-failed':
+      return 'The security check failed. Refresh and try again.';
+    case 'operation-not-allowed':
+      return 'This sign-in method is not enabled in Firebase.';
+    case 'session-expired':
+      return 'The OTP has expired. Request a new code.';
+    case 'invalid-verification-code':
+      return 'The OTP is incorrect.';
+    default:
+      final message = error.message ?? 'Authentication failed.';
+      if (message.toLowerCase().contains('region')) {
+        return 'SMS is blocked for this country. Enable the country in Firebase Authentication > Settings > SMS region policy.';
+      }
+      return message;
+  }
+}
 
 Future<UserCredential> signInWithGoogleFirebase() async {
   if (kIsWeb) {
@@ -114,9 +152,24 @@ class _AuthLoginScreenState extends State<AuthLoginScreen> {
 
   bool isLoading = false;
 
+  @override
+  void dispose() {
+    emailController.dispose();
+    passwordController.dispose();
+    super.dispose();
+  }
+
   Future<void> loginUser() async {
-    if (emailController.text.isEmpty || passwordController.text.isEmpty) {
-      showMessage('Please enter email and password');
+    final email = emailController.text.trim();
+    final password = passwordController.text;
+
+    if (!AuthValidators.isValidEmail(email)) {
+      showMessage('Please enter a valid email address.');
+      return;
+    }
+
+    if (password.isEmpty) {
+      showMessage('Please enter your password.');
       return;
     }
 
@@ -127,13 +180,13 @@ class _AuthLoginScreenState extends State<AuthLoginScreen> {
 
       UserCredential userCredential =
           await FirebaseAuth.instance.signInWithEmailAndPassword(
-        email: emailController.text.trim(),
-        password: passwordController.text.trim(),
+        email: email,
+        password: password,
       );
 
       await handleExistingUser(userCredential.user!);
     } on FirebaseAuthException catch (e) {
-      showMessage(e.message ?? 'Login failed');
+      showMessage(friendlyAuthMessage(e));
     } finally {
       if (mounted) {
         setState(() {
@@ -165,7 +218,7 @@ class _AuthLoginScreenState extends State<AuthLoginScreen> {
 
       await handleExistingUser(user);
     } on FirebaseAuthException catch (e) {
-      showMessage(e.message ?? 'Google login failed');
+      showMessage(friendlyAuthMessage(e));
     } catch (e) {
       showMessage('Google login cancelled or failed');
     } finally {
@@ -178,11 +231,6 @@ class _AuthLoginScreenState extends State<AuthLoginScreen> {
   }
 
   void openPhoneLogin() {
-    if (widget.role == 'admin') {
-      showMessage('Admin must login with email and password only');
-      return;
-    }
-
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -325,7 +373,7 @@ class _AuthLoginScreenState extends State<AuthLoginScreen> {
               ),
               const SizedBox(width: 22),
               SocialCircleButton(
-                text: '☎',
+                text: 'â˜Ž',
                 color: const Color(0xFF00D9B8),
                 onTap: isLoading ? null : openPhoneLogin,
               ),
@@ -381,28 +429,57 @@ class _AuthSignupScreenState extends State<AuthSignupScreen> {
 
   bool isLoading = false;
 
+  @override
+  void dispose() {
+    firstNameController.dispose();
+    lastNameController.dispose();
+    emailController.dispose();
+    specialtyController.dispose();
+    passwordController.dispose();
+    confirmPasswordController.dispose();
+    super.dispose();
+  }
+
+  bool validateProfileFields() {
+    final firstName = firstNameController.text.trim();
+    final lastName = lastNameController.text.trim();
+
+    if (!AuthValidators.isValidName(firstName)) {
+      showMessage('Enter a valid first name using letters only.');
+      return false;
+    }
+
+    if (!AuthValidators.isValidName(lastName)) {
+      showMessage('Enter a valid last name using letters only.');
+      return false;
+    }
+
+    if (widget.role == 'doctor' && specialtyController.text.trim().length < 2) {
+      showMessage('Please enter a valid specialty or designation.');
+      return false;
+    }
+
+    return true;
+  }
+
   Future<void> registerWithEmail() async {
-    if (firstNameController.text.isEmpty ||
-        lastNameController.text.isEmpty ||
-        emailController.text.isEmpty ||
-        passwordController.text.isEmpty ||
-        confirmPasswordController.text.isEmpty) {
-      showMessage('Please fill all fields');
+    final email = emailController.text.trim();
+    final password = passwordController.text;
+
+    if (!validateProfileFields()) return;
+
+    if (!AuthValidators.isValidEmail(email)) {
+      showMessage('Please enter a valid email address.');
       return;
     }
 
-    if (widget.role == 'doctor' && specialtyController.text.isEmpty) {
-      showMessage('Please enter specialty/designation');
+    if (password != confirmPasswordController.text) {
+      showMessage('Passwords do not match.');
       return;
     }
 
-    if (passwordController.text != confirmPasswordController.text) {
-      showMessage('Passwords do not match');
-      return;
-    }
-
-    if (passwordController.text.length < 6) {
-      showMessage('Password must be at least 6 characters');
+    if (!AuthValidators.isStrongPassword(password)) {
+      showMessage(AuthValidators.passwordHelp);
       return;
     }
 
@@ -413,8 +490,8 @@ class _AuthSignupScreenState extends State<AuthSignupScreen> {
 
       UserCredential userCredential =
           await FirebaseAuth.instance.createUserWithEmailAndPassword(
-        email: emailController.text.trim(),
-        password: passwordController.text.trim(),
+        email: email,
+        password: password,
       );
 
       User user = userCredential.user!;
@@ -440,7 +517,7 @@ class _AuthSignupScreenState extends State<AuthSignupScreen> {
         Navigator.pop(context);
       }
     } on FirebaseAuthException catch (e) {
-      showMessage(e.message ?? 'Signup failed');
+      showMessage(friendlyAuthMessage(e));
     } finally {
       if (mounted) {
         setState(() {
@@ -451,10 +528,7 @@ class _AuthSignupScreenState extends State<AuthSignupScreen> {
   }
 
   Future<void> registerWithGoogle() async {
-    if (widget.role == 'doctor' && specialtyController.text.isEmpty) {
-      showMessage('Please enter specialty/designation first');
-      return;
-    }
+    if (!validateProfileFields()) return;
 
     try {
       setState(() {
@@ -510,7 +584,7 @@ class _AuthSignupScreenState extends State<AuthSignupScreen> {
         Navigator.pop(context);
       }
     } on FirebaseAuthException catch (e) {
-      showMessage(e.message ?? 'Google signup failed');
+      showMessage(friendlyAuthMessage(e));
     } catch (e) {
       showMessage('Google signup cancelled or failed');
     } finally {
@@ -523,10 +597,7 @@ class _AuthSignupScreenState extends State<AuthSignupScreen> {
   }
 
   void openPhoneSignup() {
-    if (widget.role == 'doctor' && specialtyController.text.isEmpty) {
-      showMessage('Please enter specialty/designation first');
-      return;
-    }
+    if (!validateProfileFields()) return;
 
     Navigator.push(
       context,
@@ -598,6 +669,17 @@ class _AuthSignupScreenState extends State<AuthSignupScreen> {
             icon: Icons.lock_outline,
             obscureText: true,
           ),
+          const SizedBox(height: 6),
+          const Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              AuthValidators.passwordHelp,
+              style: TextStyle(
+                fontSize: 11,
+                color: Colors.black54,
+              ),
+            ),
+          ),
           const SizedBox(height: 12),
           AuthTextField(
             controller: confirmPasswordController,
@@ -632,7 +714,7 @@ class _AuthSignupScreenState extends State<AuthSignupScreen> {
               ),
               const SizedBox(width: 22),
               SocialCircleButton(
-                text: '☎',
+                text: 'â˜Ž',
                 color: const Color(0xFF00D9B8),
                 onTap: isLoading ? null : openPhoneSignup,
               ),
@@ -698,14 +780,24 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
   bool codeSent = false;
   bool isLoading = false;
 
-  Future<void> sendOtp() async {
-    String phone = phoneController.text.trim();
+  @override
+  void dispose() {
+    phoneController.dispose();
+    otpController.dispose();
+    super.dispose();
+  }
 
-    if (!phone.startsWith('+')) {
+  Future<void> sendOtp() async {
+    final phone = AuthValidators.normalizePhone(phoneController.text);
+
+    if (!AuthValidators.isValidPhone(phone)) {
       showMessage(
-          'Enter phone number with country code. Example: +8801XXXXXXXXX');
+        'Enter a valid international phone number, for example +8801XXXXXXXXX.',
+      );
       return;
     }
+
+    phoneController.text = phone;
 
     try {
       setState(() {
@@ -733,7 +825,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
             }
           },
           verificationFailed: (FirebaseAuthException e) {
-            showMessage(e.message ?? 'Phone verification failed');
+            showMessage(friendlyAuthMessage(e));
           },
           codeSent: (String id, int? resendToken) {
             setState(() {
@@ -749,7 +841,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
         );
       }
     } on FirebaseAuthException catch (e) {
-      showMessage(e.message ?? 'Failed to send OTP');
+      showMessage(friendlyAuthMessage(e));
     } catch (e) {
       showMessage('Failed to send OTP');
     } finally {
@@ -762,8 +854,9 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
   }
 
   Future<void> verifyOtp() async {
-    if (otpController.text.isEmpty) {
-      showMessage('Please enter OTP');
+    final otp = otpController.text.trim();
+    if (!RegExp(r'^\d{6}$').hasMatch(otp)) {
+      showMessage('Enter the 6-digit OTP.');
       return;
     }
 
@@ -775,12 +868,11 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
       UserCredential userCredential;
 
       if (kIsWeb) {
-        userCredential =
-            await webConfirmationResult!.confirm(otpController.text.trim());
+        userCredential = await webConfirmationResult!.confirm(otp);
       } else {
         PhoneAuthCredential credential = PhoneAuthProvider.credential(
           verificationId: verificationId,
-          smsCode: otpController.text.trim(),
+          smsCode: otp,
         );
 
         userCredential =
@@ -796,7 +888,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
 
       await completePhoneAuth(user);
     } on FirebaseAuthException catch (e) {
-      showMessage(e.message ?? 'Invalid OTP');
+      showMessage(friendlyAuthMessage(e));
     } catch (e) {
       showMessage('Invalid OTP or verification failed');
     } finally {
@@ -845,6 +937,11 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
 
       if (savedRole == 'patient') {
         openHome(const PatientHome());
+        return;
+      }
+
+      if (savedRole == 'admin') {
+        openHome(const AdminHome());
         return;
       }
 
@@ -945,7 +1042,10 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                 ),
           const SizedBox(height: 20),
           const Text(
-            'For testing, you can add a test phone number in Firebase Authentication phone provider settings.',
+            'Use international format, for example +8801XXXXXXXXX. '
+            'For testing, add a test number in Firebase Authentication. '
+            'If SMS says the region is disabled, enable the country in '
+            'Authentication > Settings > SMS region policy.',
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 11, color: Colors.black54),
           ),
@@ -965,15 +1065,22 @@ class ForgotPasswordScreen extends StatefulWidget {
 class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   final emailController = TextEditingController();
 
+  @override
+  void dispose() {
+    emailController.dispose();
+    super.dispose();
+  }
+
   Future<void> sendResetEmail() async {
-    if (emailController.text.isEmpty) {
-      showMessage('Please enter your email');
+    final email = emailController.text.trim();
+    if (!AuthValidators.isValidEmail(email)) {
+      showMessage('Please enter a valid email address.');
       return;
     }
 
     try {
       await FirebaseAuth.instance.sendPasswordResetEmail(
-        email: emailController.text.trim(),
+        email: email,
       );
 
       if (!mounted) return;
@@ -981,7 +1088,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       showMessage('Password reset email sent');
       Navigator.pop(context);
     } on FirebaseAuthException catch (e) {
-      showMessage(e.message ?? 'Failed to send reset email');
+      showMessage(friendlyAuthMessage(e));
     }
   }
 

@@ -118,20 +118,22 @@ class _PatientHomeState extends State<PatientHome> {
                   buildHeader(),
                   const SizedBox(height: 18),
                   buildSearchSection(),
+                  if (searchText.trim().isNotEmpty) ...[
+                    const SizedBox(height: 16),
+                    buildSectionTitle('Search Results'),
+                    const SizedBox(height: 10),
+                    buildDoctorList(),
+                  ],
                   const SizedBox(height: 24),
-                  buildSectionTitle(
-                    'Smart Healthcare Features',
-                  ),
+                  buildSectionTitle('Smart Healthcare Features'),
                   const SizedBox(height: 12),
                   buildFeatureGrid(),
-                  const SizedBox(height: 26),
-                  buildSectionTitle(
-                    searchText.isEmpty
-                        ? 'Recommended Doctors'
-                        : 'Search Results',
-                  ),
-                  const SizedBox(height: 12),
-                  buildDoctorList(),
+                  if (searchText.trim().isEmpty) ...[
+                    const SizedBox(height: 26),
+                    buildSectionTitle('Recommended Doctors'),
+                    const SizedBox(height: 12),
+                    buildDoctorList(),
+                  ],
                 ],
               ),
             );
@@ -162,7 +164,7 @@ class _PatientHomeState extends State<PatientHome> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
-                'Welcome back,',
+                'Welcome,',
                 style: TextStyle(
                   color: Colors.black54,
                 ),
@@ -528,7 +530,9 @@ class _PatientHomeState extends State<PatientHome> {
                       doctorName: doctor.name,
                       specialty: doctor.specialty,
                       rating: doctor.rating.toString(),
-                      available: doctor.availableSlots.join(', '),
+                      available: doctor.availableSlots
+                          .map(availabilitySlotLabel)
+                          .join(', '),
                     ),
                   );
                 },

@@ -49,6 +49,14 @@ class MedicineScreen extends StatelessWidget {
                         prefixIcon: Icon(Icons.schedule),
                       ),
                     ),
+                    const SizedBox(height: 10),
+                    const Text(
+                      'This reminder repeats daily. Marking it taken applies only to today and resets tomorrow.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.black54,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -155,9 +163,32 @@ class MedicineScreen extends StatelessWidget {
 
           return ListView.builder(
             padding: const EdgeInsets.fromLTRB(18, 18, 18, 90),
-            itemCount: appData.medicines.length,
+            itemCount: appData.medicines.length + 1,
             itemBuilder: (context, index) {
-              final medicine = appData.medicines[index];
+              if (index == 0) {
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 14),
+                  padding: const EdgeInsets.all(15),
+                  decoration: BoxDecoration(
+                    color: AppColors.lightMint,
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                  child: const Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(Icons.repeat, color: AppColors.primaryDark),
+                      SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'Daily reminders reset automatically at the start of each new day. A dose marked taken today will be pending again tomorrow.',
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }
+
+              final medicine = appData.medicines[index - 1];
 
               return Container(
                 margin: const EdgeInsets.only(bottom: 12),
@@ -223,6 +254,19 @@ class MedicineScreen extends StatelessWidget {
                               ),
                             ],
                           ),
+                          const SizedBox(height: 4),
+                          Text(
+                            medicine.taken
+                                ? 'Taken today • repeats tomorrow'
+                                : 'Pending today • repeats daily',
+                            style: TextStyle(
+                              color: medicine.taken
+                                  ? Colors.green.shade700
+                                  : Colors.orange.shade800,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -242,8 +286,8 @@ class MedicineScreen extends StatelessWidget {
                         }
                       },
                       tooltip: medicine.taken
-                          ? 'Mark as not taken'
-                          : 'Mark as taken',
+                          ? "Undo today's dose"
+                          : "Mark today's dose as taken",
                       icon: Icon(
                         medicine.taken
                             ? Icons.undo
