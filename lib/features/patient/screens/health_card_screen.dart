@@ -22,6 +22,8 @@ class HealthCardScreen extends StatelessWidget {
           return ListView(
             padding: const EdgeInsets.all(18),
             children: [
+              buildPurposeCard(),
+              const SizedBox(height: 14),
               buildMainCard(profile, appData.currentPatientName),
               const SizedBox(height: 18),
               buildInformationCard(
@@ -66,6 +68,29 @@ class HealthCardScreen extends StatelessWidget {
             ],
           );
         },
+      ),
+    );
+  }
+
+  Widget buildPurposeCard() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.lightMint,
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: const Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.badge_outlined, color: AppColors.primaryDark),
+          SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Health Card is a quick read-only summary for appointments or emergencies. It combines your Health Profile, current medicines, and latest completed visit.',
+            ),
+          ),
+        ],
       ),
     );
   }

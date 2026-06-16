@@ -17,13 +17,9 @@ class AppointmentScreen extends StatefulWidget {
 
 class _AppointmentScreenState extends State<AppointmentScreen> {
   final TextEditingController symptomsController = TextEditingController();
-
   final TextEditingController notesController = TextEditingController();
 
-  DateTime selectedDate = DateTime.now().add(
-    const Duration(days: 1),
-  );
-
+  DateTime selectedDate = DateTime.now().add(const Duration(days: 1));
   String? selectedTime;
   bool isSaving = false;
 
@@ -34,26 +30,32 @@ class _AppointmentScreenState extends State<AppointmentScreen> {
     super.dispose();
   }
 
+  List<String> get availableTimes {
+    return availabilityTimesForDate(widget.doctor, selectedDate);
+  }
+
   Future<void> selectDate() async {
     final selected = await showDatePicker(
       context: context,
       initialDate: selectedDate,
       firstDate: DateTime.now(),
-      lastDate: DateTime.now().add(
-        const Duration(days: 90),
-      ),
+      lastDate: DateTime.now().add(const Duration(days: 180)),
     );
 
     if (selected != null) {
       setState(() {
         selectedDate = selected;
+        if (!availabilityTimesForDate(widget.doctor, selected)
+            .contains(selectedTime)) {
+          selectedTime = null;
+        }
       });
     }
   }
 
   Future<void> confirmAppointment() async {
     if (selectedTime == null) {
-      showMessage('Please select a time slot.');
+      showMessage('Please select an available time slot.');
       return;
     }
 
@@ -83,9 +85,8 @@ class _AppointmentScreenState extends State<AppointmentScreen> {
           return AlertDialog(
             title: const Text('Appointment Booked'),
             content: Text(
-              'Your appointment with ${widget.doctor.name} '
-              'has been booked for ${formatDate(selectedDate)} '
-              'at $selectedTime.',
+              'Your appointment with ${widget.doctor.name} has been booked '
+              'for ${formatDate(selectedDate)} at $selectedTime.',
             ),
             actions: [
               TextButton(
@@ -103,9 +104,7 @@ class _AppointmentScreenState extends State<AppointmentScreen> {
       Navigator.pop(context);
     } catch (error) {
       if (!mounted) return;
-      showMessage(
-        error.toString().replaceFirst('Bad state: ', ''),
-      );
+      showMessage(error.toString().replaceFirst('Bad state: ', ''));
     } finally {
       if (mounted) {
         setState(() {
@@ -117,9 +116,7 @@ class _AppointmentScreenState extends State<AppointmentScreen> {
 
   void showMessage(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-      ),
+      SnackBar(content: Text(message)),
     );
   }
 
@@ -129,99 +126,114 @@ class _AppointmentScreenState extends State<AppointmentScreen> {
       appBar: AppBar(
         title: const Text('Book Appointment'),
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            buildDoctorCard(),
-            const SizedBox(height: 24),
-            buildTitle('Select Date'),
-            const SizedBox(height: 10),
-            InkWell(
-              onTap: selectDate,
-              borderRadius: BorderRadius.circular(16),
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(16),
-                decoration: buildWhiteCardDecoration(),
-                child: Row(
-                  children: [
-                    const Icon(
-                      Icons.calendar_month,
-                      color: AppColors.primaryDark,
-                    ),
-                    const SizedBox(width: 12),
-                    Text(
-                      formatDate(selectedDate),
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const Spacer(),
-                    const Icon(Icons.edit_calendar),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 24),
-            buildTitle('Select Time Slot'),
-            const SizedBox(height: 10),
-            Wrap(
-              spacing: 10,
-              runSpacing: 10,
-              children: widget.doctor.availableSlots.map((time) {
-                final isSelected = selectedTime == time;
+      body: AnimatedBuilder(
+        animation: AppData.instance,
+        builder: (context, child) {
+          final times = availableTimes;
 
-                return ChoiceChip(
-                  label: Text(time),
-                  selected: isSelected,
-                  selectedColor: AppColors.primary,
-                  onSelected: (selected) {
-                    setState(() {
-                      selectedTime = time;
-                    });
-                  },
-                );
-              }).toList(),
-            ),
-            const SizedBox(height: 24),
-            buildTitle('Symptoms'),
-            const SizedBox(height: 10),
-            TextField(
-              controller: symptomsController,
-              maxLines: 3,
-              decoration: const InputDecoration(
-                hintText: 'Example: fever, headache, cough',
-                prefixIcon: Icon(
-                  Icons.health_and_safety_outlined,
+          return SingleChildScrollView(
+            padding: const EdgeInsets.all(18),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                buildDoctorCard(),
+                const SizedBox(height: 24),
+                buildTitle('Select Date'),
+                const SizedBox(height: 10),
+                InkWell(
+                  onTap: selectDate,
+                  borderRadius: BorderRadius.circular(16),
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(16),
+                    decoration: buildWhiteCardDecoration(),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.calendar_month,
+                          color: AppColors.primaryDark,
+                        ),
+                        const SizedBox(width: 12),
+                        Text(
+                          formatDate(selectedDate),
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        const Spacer(),
+                        const Icon(Icons.edit_calendar),
+                      ],
+                    ),
+                  ),
                 ),
-              ),
-            ),
-            const SizedBox(height: 18),
-            buildTitle('Pre-visit Notes'),
-            const SizedBox(height: 10),
-            TextField(
-              controller: notesController,
-              maxLines: 3,
-              decoration: const InputDecoration(
-                hintText: 'Write extra information for the doctor',
-                prefixIcon: Icon(Icons.notes),
-              ),
-            ),
-            const SizedBox(height: 26),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: isSaving ? null : confirmAppointment,
-                icon: const Icon(Icons.check_circle_outline),
-                label: Text(
-                  isSaving ? 'Booking...' : 'Confirm Appointment',
+                const SizedBox(height: 24),
+                buildTitle('Available Times for ${formatDate(selectedDate)}'),
+                const SizedBox(height: 10),
+                if (times.isEmpty)
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(18),
+                    decoration: buildWhiteCardDecoration(),
+                    child: const Text(
+                      'This doctor has not added any availability for this date. '
+                      'Choose another date.',
+                      textAlign: TextAlign.center,
+                    ),
+                  )
+                else
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    children: times.map((time) {
+                      final isSelected = selectedTime == time;
+                      return ChoiceChip(
+                        label: Text(time),
+                        selected: isSelected,
+                        selectedColor: AppColors.primary,
+                        onSelected: (_) {
+                          setState(() {
+                            selectedTime = time;
+                          });
+                        },
+                      );
+                    }).toList(),
+                  ),
+                const SizedBox(height: 24),
+                buildTitle('Symptoms'),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: symptomsController,
+                  maxLines: 3,
+                  decoration: const InputDecoration(
+                    hintText: 'Example: fever, headache, cough',
+                    prefixIcon: Icon(Icons.health_and_safety_outlined),
+                  ),
                 ),
-              ),
+                const SizedBox(height: 18),
+                buildTitle('Pre-visit Notes'),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: notesController,
+                  maxLines: 3,
+                  decoration: const InputDecoration(
+                    hintText: 'Write extra information for the doctor',
+                    prefixIcon: Icon(Icons.notes),
+                  ),
+                ),
+                const SizedBox(height: 26),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed:
+                        isSaving || times.isEmpty ? null : confirmAppointment,
+                    icon: const Icon(Icons.check_circle_outline),
+                    label: Text(
+                      isSaving ? 'Booking...' : 'Confirm Appointment',
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
+          );
+        },
       ),
     );
   }
@@ -275,10 +287,7 @@ class _AppointmentScreenState extends State<AppointmentScreen> {
   Widget buildTitle(String title) {
     return Text(
       title,
-      style: const TextStyle(
-        fontSize: 17,
-        fontWeight: FontWeight.bold,
-      ),
+      style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
     );
   }
 
@@ -286,9 +295,7 @@ class _AppointmentScreenState extends State<AppointmentScreen> {
     return BoxDecoration(
       color: Colors.white,
       borderRadius: BorderRadius.circular(16),
-      border: Border.all(
-        color: Colors.grey.shade300,
-      ),
+      border: Border.all(color: Colors.grey.shade300),
     );
   }
 }

@@ -286,24 +286,38 @@ class PatientAppointmentsScreen extends StatelessWidget {
 
     if (!context.mounted) return;
 
+    final availableTimes = availabilityTimesForDate(
+      selectedDoctor,
+      selectedDate,
+    );
+
+    if (availableTimes.isEmpty) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'No availability was added for ${formatDate(selectedDate)}.',
+          ),
+        ),
+      );
+      return;
+    }
+
     final selectedTime = await showDialog<String>(
       context: context,
       builder: (dialogContext) {
         return SimpleDialog(
-          title: const Text('Select New Time'),
-          children: selectedDoctor!.availableSlots.map((slot) {
+          title: Text(
+            'Select Time • ${formatDate(selectedDate)}',
+          ),
+          children: availableTimes.map((time) {
             return SimpleDialogOption(
               onPressed: () {
-                Navigator.pop(
-                  dialogContext,
-                  slot,
-                );
+                Navigator.pop(dialogContext, time);
               },
               child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  vertical: 6,
-                ),
-                child: Text(slot),
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                child: Text(time),
               ),
             );
           }).toList(),

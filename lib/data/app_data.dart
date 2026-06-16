@@ -55,28 +55,90 @@ String _dateKey(DateTime date) {
   return '$year$month$day';
 }
 
+String availabilitySlotValue(DateTime date, String time) {
+  final year = date.year.toString().padLeft(4, '0');
+  final month = date.month.toString().padLeft(2, '0');
+  final day = date.day.toString().padLeft(2, '0');
+  return '$year-$month-$day|${time.trim()}';
+}
+
+DateTime? availabilitySlotDate(String value) {
+  final separatorIndex = value.indexOf('|');
+  if (separatorIndex <= 0) return null;
+  return DateTime.tryParse(value.substring(0, separatorIndex));
+}
+
+String availabilitySlotTime(String value) {
+  final separatorIndex = value.indexOf('|');
+  if (separatorIndex < 0 || separatorIndex == value.length - 1) {
+    return value.trim();
+  }
+  return value.substring(separatorIndex + 1).trim();
+}
+
+String availabilitySlotLabel(String value) {
+  final date = availabilitySlotDate(value);
+  final time = availabilitySlotTime(value);
+  if (date == null) return 'Every day • $time';
+  return '${formatDate(date)} • $time';
+}
+
+List<String> availabilityTimesForDate(
+  DoctorModel doctor,
+  DateTime date,
+) {
+  final requestedKey = _dateKey(date);
+  final times = doctor.availableSlots
+      .where((slot) {
+        final slotDate = availabilitySlotDate(slot);
+        return slotDate == null || _dateKey(slotDate) == requestedKey;
+      })
+      .map(availabilitySlotTime)
+      .where((time) => time.isNotEmpty)
+      .toSet()
+      .toList();
+
+  times.sort((first, second) {
+    final firstDate = _combineDateAndTime(date, first);
+    final secondDate = _combineDateAndTime(date, second);
+    return firstDate.compareTo(secondDate);
+  });
+  return times;
+}
+
 String _safeKey(String value) {
   return value.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '_');
 }
 
 DateTime _combineDateAndTime(DateTime date, String timeText) {
-  final match = RegExp(
+  final normalized = timeText.trim();
+  final twelveHourMatch = RegExp(
     r'^(\d{1,2}):(\d{2})\s*(AM|PM)$',
     caseSensitive: false,
-  ).firstMatch(timeText.trim());
+  ).firstMatch(normalized);
 
-  if (match == null) {
-    return DateTime(date.year, date.month, date.day, 9);
+  if (twelveHourMatch != null) {
+    var hour = int.parse(twelveHourMatch.group(1)!);
+    final minute = int.parse(twelveHourMatch.group(2)!);
+    final period = twelveHourMatch.group(3)!.toUpperCase();
+
+    if (period == 'PM' && hour != 12) hour += 12;
+    if (period == 'AM' && hour == 12) hour = 0;
+    return DateTime(date.year, date.month, date.day, hour, minute);
   }
 
-  var hour = int.parse(match.group(1)!);
-  final minute = int.parse(match.group(2)!);
-  final period = match.group(3)!.toUpperCase();
+  final twentyFourHourMatch = RegExp(
+    r'^(\d{1,2}):(\d{2})$',
+  ).firstMatch(normalized);
+  if (twentyFourHourMatch != null) {
+    final hour = int.parse(twentyFourHourMatch.group(1)!);
+    final minute = int.parse(twentyFourHourMatch.group(2)!);
+    if (hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59) {
+      return DateTime(date.year, date.month, date.day, hour, minute);
+    }
+  }
 
-  if (period == 'PM' && hour != 12) hour += 12;
-  if (period == 'AM' && hour == 12) hour = 0;
-
-  return DateTime(date.year, date.month, date.day, hour, minute);
+  return DateTime(date.year, date.month, date.day, 9);
 }
 
 class DoctorModel {
@@ -245,32 +307,102 @@ class MedicineModel {
     required this.name,
     required this.dosage,
     required this.time,
-    this.taken = false,
     this.patientId = '',
+    this.lastTakenDateKey = '',
     DateTime? createdAt,
   }) : createdAt = createdAt ?? DateTime.now();
 
   final String id;
   final String patientId;
   final DateTime createdAt;
+  final String lastTakenDateKey;
   String name;
   String dosage;
   String time;
-  bool taken;
+
+  bool get taken => lastTakenDateKey == _dateKey(DateTime.now());
 
   factory MedicineModel.fromFirestore(
     QueryDocumentSnapshot<Map<String, dynamic>> document,
   ) {
     final data = document.data();
+    var lastTakenKey = (data['lastTakenDateKey'] ?? '').toString();
+
+    // Backward compatibility for old records that only stored `taken`.
+    if (lastTakenKey.isEmpty && data['taken'] == true) {
+      final updatedAt = data['lastTakenAt'] ?? data['updatedAt'];
+      if (updatedAt != null) {
+        final updatedDate = _readDate(updatedAt, fallback: DateTime.now());
+        if (_dateKey(updatedDate) == _dateKey(DateTime.now())) {
+          lastTakenKey = _dateKey(DateTime.now());
+        }
+      }
+    }
+
     return MedicineModel(
       id: document.id,
       patientId: (data['patientId'] ?? '').toString(),
       name: (data['name'] ?? 'Medicine').toString(),
       dosage: (data['dosage'] ?? '').toString(),
       time: (data['time'] ?? '').toString(),
-      taken: data['taken'] == true,
+      lastTakenDateKey: lastTakenKey,
       createdAt: _readDate(data['createdAt'], fallback: DateTime.now()),
     );
+  }
+}
+
+class PrescriptionMedicineModel {
+  const PrescriptionMedicineModel({
+    required this.name,
+    required this.dosage,
+    required this.frequency,
+    required this.duration,
+    required this.instructions,
+  });
+
+  final String name;
+  final String dosage;
+  final String frequency;
+  final String duration;
+  final String instructions;
+
+  factory PrescriptionMedicineModel.fromMap(Map<String, dynamic> data) {
+    return PrescriptionMedicineModel(
+      name: (data['name'] ?? 'Medicine').toString(),
+      dosage: (data['dosage'] ?? '').toString(),
+      frequency: (data['frequency'] ?? '').toString(),
+      duration: (data['duration'] ?? '').toString(),
+      instructions: (data['instructions'] ?? '').toString(),
+    );
+  }
+
+  factory PrescriptionMedicineModel.fromLegacy(String value) {
+    return PrescriptionMedicineModel(
+      name: value.trim().isEmpty ? 'Medicine' : value.trim(),
+      dosage: '',
+      frequency: '',
+      duration: '',
+      instructions: '',
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return <String, dynamic>{
+      'name': name,
+      'dosage': dosage,
+      'frequency': frequency,
+      'duration': duration,
+      'instructions': instructions,
+    };
+  }
+
+  String get summary {
+    final details = <String>[
+      if (dosage.isNotEmpty) dosage,
+      if (frequency.isNotEmpty) frequency,
+      if (duration.isNotEmpty) duration,
+    ];
+    return details.isEmpty ? name : '$name — ${details.join(' • ')}';
   }
 }
 
@@ -279,12 +411,14 @@ class PrescriptionModel {
     required this.id,
     required this.patientName,
     required this.doctorName,
-    required this.medicines,
+    required this.medicineItems,
     required this.notes,
     required this.date,
     this.patientId = '',
     this.doctorId = '',
     this.appointmentId = '',
+    this.diagnosis = '',
+    this.followUpDate,
   });
 
   final String id;
@@ -293,14 +427,44 @@ class PrescriptionModel {
   final String appointmentId;
   final String patientName;
   final String doctorName;
-  final List<String> medicines;
+  final List<PrescriptionMedicineModel> medicineItems;
   final String notes;
+  final String diagnosis;
+  final DateTime? followUpDate;
   final DateTime date;
+
+  List<String> get medicines =>
+      medicineItems.map((medicine) => medicine.summary).toList();
 
   factory PrescriptionModel.fromFirestore(
     QueryDocumentSnapshot<Map<String, dynamic>> document,
   ) {
     final data = document.data();
+    final structuredItems = <PrescriptionMedicineModel>[];
+    final rawItems = data['medicationItems'];
+
+    if (rawItems is List) {
+      for (final item in rawItems) {
+        if (item is Map) {
+          structuredItems.add(
+            PrescriptionMedicineModel.fromMap(
+              Map<String, dynamic>.from(item),
+            ),
+          );
+        }
+      }
+    }
+
+    if (structuredItems.isEmpty) {
+      structuredItems.addAll(
+        _readStringList(data['medicines']).map(
+          PrescriptionMedicineModel.fromLegacy,
+        ),
+      );
+    }
+
+    final followUpValue = data['followUpDate'];
+
     return PrescriptionModel(
       id: document.id,
       patientId: (data['patientId'] ?? '').toString(),
@@ -308,10 +472,16 @@ class PrescriptionModel {
       appointmentId: (data['appointmentId'] ?? '').toString(),
       patientName: (data['patientName'] ?? 'Patient').toString(),
       doctorName: (data['doctorName'] ?? 'Doctor').toString(),
-      medicines: _readStringList(data['medicines']),
+      medicineItems: structuredItems,
       notes: (data['notes'] ?? data['doctorNotes'] ?? '').toString(),
-      date: _readDate(data['createdAt'] ?? data['date'],
-          fallback: DateTime.now()),
+      diagnosis: (data['diagnosis'] ?? '').toString(),
+      followUpDate: followUpValue == null
+          ? null
+          : _readDate(followUpValue, fallback: DateTime.now()),
+      date: _readDate(
+        data['createdAt'] ?? data['date'],
+        fallback: DateTime.now(),
+      ),
     );
   }
 }
@@ -360,6 +530,18 @@ class HealthProfileModel {
       emergencyContact: (data['emergencyContact'] ?? '').toString(),
     );
   }
+}
+
+class ChatPartnerModel {
+  const ChatPartnerModel({
+    required this.id,
+    required this.name,
+    required this.subtitle,
+  });
+
+  final String id;
+  final String name;
+  final String subtitle;
 }
 
 class ChatMessageModel {
@@ -586,6 +768,7 @@ class AppData extends ChangeNotifier {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   StreamSubscription<User?>? _authSubscription;
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _chatSubscription;
   final List<StreamSubscription<dynamic>> _subscriptions =
       <StreamSubscription<dynamic>>[];
 
@@ -707,6 +890,8 @@ class AppData extends ChangeNotifier {
   }
 
   Future<void> _cancelDataSubscriptions() async {
+    await _chatSubscription?.cancel();
+    _chatSubscription = null;
     for (final subscription in _subscriptions) {
       await subscription.cancel();
     }
@@ -1212,57 +1397,80 @@ class AppData extends ChangeNotifier {
     }
   }
 
-  void _chooseChatPartner() {
-    String partnerId = '';
-    String partnerName = 'Healthcare Contact';
-    String subtitle = '';
+  List<ChatPartnerModel> get chatPartners {
+    final partners = <String, ChatPartnerModel>{};
 
-    if (currentUserRole == 'patient') {
-      final eligible = appointments.where((appointment) {
-        return appointment.doctorId.isNotEmpty &&
-            appointment.status != 'Cancelled' &&
-            appointment.status != 'Rejected';
-      }).toList();
-      if (eligible.isNotEmpty) {
-        eligible.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-        final appointment = eligible.first;
-        partnerId = appointment.doctorId;
-        partnerName = appointment.doctorName;
-        subtitle = appointment.specialty;
+    for (final appointment in appointments) {
+      if (appointment.status == 'Cancelled' ||
+          appointment.status == 'Rejected') {
+        continue;
       }
-    } else if (currentUserRole == 'doctor') {
-      final eligible = appointments.where((appointment) {
-        return appointment.patientId.isNotEmpty &&
-            appointment.status != 'Cancelled' &&
-            appointment.status != 'Rejected';
-      }).toList();
-      if (eligible.isNotEmpty) {
-        eligible.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-        partnerId = eligible.first.patientId;
-        partnerName = eligible.first.patientName;
-        subtitle = 'Patient';
+
+      if (currentUserRole == 'patient' && appointment.doctorId.isNotEmpty) {
+        partners[appointment.doctorId] = ChatPartnerModel(
+          id: appointment.doctorId,
+          name: appointment.doctorName,
+          subtitle: appointment.specialty,
+        );
+      } else if (currentUserRole == 'doctor' &&
+          appointment.patientId.isNotEmpty) {
+        partners[appointment.patientId] = ChatPartnerModel(
+          id: appointment.patientId,
+          name: appointment.patientName,
+          subtitle: 'Patient',
+        );
       }
     }
 
-    if (partnerId == activeChatPartnerId) {
-      activeChatPartnerName = partnerName;
-      activeChatPartnerSubtitle = subtitle;
+    final result = partners.values.toList()
+      ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+    return result;
+  }
+
+  void _chooseChatPartner() {
+    final availablePartners = chatPartners;
+
+    if (availablePartners.isEmpty) {
+      activeChatPartnerId = '';
+      activeChatPartnerName = 'Healthcare Contact';
+      activeChatPartnerSubtitle = '';
+      chatMessages.clear();
+      unawaited(_chatSubscription?.cancel());
+      _chatSubscription = null;
       return;
     }
 
-    activeChatPartnerId = partnerId;
-    activeChatPartnerName = partnerName;
-    activeChatPartnerSubtitle = subtitle;
-    chatMessages.clear();
+    final currentStillAvailable = availablePartners.any(
+      (partner) => partner.id == activeChatPartnerId,
+    );
+    final partner = currentStillAvailable
+        ? availablePartners.firstWhere(
+            (item) => item.id == activeChatPartnerId,
+          )
+        : availablePartners.first;
 
-    if (partnerId.isNotEmpty) {
-      _startChatListener(partnerId);
+    selectChatPartner(partner);
+  }
+
+  void selectChatPartner(ChatPartnerModel partner) {
+    if (partner.id.isEmpty) return;
+
+    final partnerChanged = partner.id != activeChatPartnerId;
+    activeChatPartnerId = partner.id;
+    activeChatPartnerName = partner.name;
+    activeChatPartnerSubtitle = partner.subtitle;
+
+    if (partnerChanged) {
+      chatMessages.clear();
+      _startChatListener(partner.id);
     }
+    notifyListeners();
   }
 
   void _startChatListener(String partnerId) {
+    unawaited(_chatSubscription?.cancel());
     final conversationId = _conversationId(currentUserId, partnerId);
-    final subscription = _firestore
+    _chatSubscription = _firestore
         .collection('messages')
         .where('participants', arrayContains: currentUserId)
         .snapshots()
@@ -1285,7 +1493,6 @@ class AppData extends ChangeNotifier {
       chatMessages.sort((a, b) => a.time.compareTo(b.time));
       notifyListeners();
     });
-    _subscriptions.add(subscription);
   }
 
   String _conversationId(String firstId, String secondId) {
@@ -1685,14 +1892,16 @@ class AppData extends ChangeNotifier {
       'name': name.trim(),
       'dosage': dosage.trim(),
       'time': time.trim(),
+      'repeat': 'Daily',
       'taken': false,
+      'lastTakenDateKey': '',
       'createdAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
     });
     await _createNotification(
       userId: currentUserId,
       title: 'Medicine Added',
-      message: '$name reminder was added.',
+      message: '$name daily reminder was added.',
     );
   }
 
@@ -1700,9 +1909,15 @@ class AppData extends ChangeNotifier {
     final reference = _firestore.collection('medicines').doc(medicineId);
     final snapshot = await reference.get();
     if (!snapshot.exists) return;
-    final currentValue = snapshot.data()?['taken'] == true;
+
+    final todayKey = _dateKey(DateTime.now());
+    final alreadyTakenToday =
+        (snapshot.data()?['lastTakenDateKey'] ?? '').toString() == todayKey;
+
     await reference.update({
-      'taken': !currentValue,
+      'taken': !alreadyTakenToday,
+      'lastTakenDateKey': alreadyTakenToday ? '' : todayKey,
+      'lastTakenAt': alreadyTakenToday ? null : FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
     });
   }
@@ -1763,24 +1978,46 @@ class AppData extends ChangeNotifier {
   Future<void> addPrescription({
     required String patientName,
     required String doctorName,
-    required List<String> medicines,
+    required List<PrescriptionMedicineModel> medicines,
+    required String diagnosis,
     required String notes,
+    DateTime? followUpDate,
   }) async {
     final patientId = _patientIdByName[patientName] ?? '';
     if (patientId.isEmpty) {
       throw StateError('Select a patient who has an appointment with you.');
     }
+    if (medicines.isEmpty) {
+      throw StateError('Add at least one medicine.');
+    }
+
+    final relatedAppointments = appointments.where((appointment) {
+      return appointment.patientId == patientId &&
+          appointment.doctorId == currentUserId;
+    }).toList()
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    final appointmentId =
+        relatedAppointments.isEmpty ? '' : relatedAppointments.first.id;
+
     final reference = _firestore.collection('prescriptions').doc();
     final batch = _firestore.batch();
     batch.set(reference, {
       'patientId': patientId,
       'doctorId': currentUserId,
+      'appointmentId': appointmentId,
       'patientName': patientName,
       'doctorName': doctorName,
-      'medicines': medicines,
-      'doctorNotes': notes,
-      'notes': notes,
+      'diagnosis': diagnosis.trim(),
+      'medicationItems': medicines.map((item) => item.toMap()).toList(),
+      'medicines': medicines.map((item) => item.summary).toList(),
+      'doctorNotes': notes.trim(),
+      'notes': notes.trim(),
+      if (followUpDate != null)
+        'followUpDate': Timestamp.fromDate(
+          DateTime(followUpDate.year, followUpDate.month, followUpDate.day),
+        ),
       'createdAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
     });
     batch.set(_firestore.collection('timeline_events').doc(), {
       'patientId': patientId,
@@ -1828,18 +2065,23 @@ class AppData extends ChangeNotifier {
     }, SetOptions(merge: true));
   }
 
-  Future<void> addAvailability(String doctorId, String time) async {
+  Future<void> addAvailability(
+    String doctorId,
+    DateTime date,
+    String time,
+  ) async {
     final normalizedTime = time.trim();
     if (normalizedTime.isEmpty) return;
+    final slot = availabilitySlotValue(date, normalizedTime);
     await _firestore.collection('doctors').doc(doctorId).update({
-      'availableSlots': FieldValue.arrayUnion(<String>[normalizedTime]),
+      'availableSlots': FieldValue.arrayUnion(<String>[slot]),
       'updatedAt': FieldValue.serverTimestamp(),
     });
   }
 
-  Future<void> removeAvailability(String doctorId, String time) async {
+  Future<void> removeAvailability(String doctorId, String slot) async {
     await _firestore.collection('doctors').doc(doctorId).update({
-      'availableSlots': FieldValue.arrayRemove(<String>[time]),
+      'availableSlots': FieldValue.arrayRemove(<String>[slot]),
       'updatedAt': FieldValue.serverTimestamp(),
     });
   }

@@ -13,11 +13,26 @@ class AiSymptomCheckerScreen extends StatefulWidget {
 
 class _AiSymptomCheckerScreenState extends State<AiSymptomCheckerScreen> {
   final Set<String> selectedSymptoms = <String>{};
+  final TextEditingController symptomSearchController = TextEditingController();
+
+  String symptomQuery = '';
 
   String? suggestedDepartment;
   String? urgency;
   String? healthSuggestion;
   DoctorModel? recommendedDoctor;
+
+  @override
+  void dispose() {
+    symptomSearchController.dispose();
+    super.dispose();
+  }
+
+  void searchSymptoms() {
+    setState(() {
+      symptomQuery = symptomSearchController.text.trim().toLowerCase();
+    });
+  }
 
   void checkSymptoms(AppData appData) {
     if (selectedSymptoms.isEmpty) {
@@ -53,6 +68,8 @@ class _AiSymptomCheckerScreenState extends State<AiSymptomCheckerScreen> {
   void clearSymptoms() {
     setState(() {
       selectedSymptoms.clear();
+      symptomSearchController.clear();
+      symptomQuery = '';
       suggestedDepartment = null;
       urgency = null;
       healthSuggestion = null;
@@ -78,9 +95,14 @@ class _AiSymptomCheckerScreenState extends State<AiSymptomCheckerScreen> {
       body: AnimatedBuilder(
         animation: appData,
         builder: (context, child) {
-          final symptoms = appData.availableSymptoms;
+          final allSymptoms = appData.availableSymptoms;
+          final symptoms = symptomQuery.isEmpty
+              ? allSymptoms
+              : allSymptoms.where((symptom) {
+                  return symptom.toLowerCase().contains(symptomQuery);
+                }).toList();
           selectedSymptoms.removeWhere(
-            (symptom) => !symptoms.contains(symptom),
+            (symptom) => !allSymptoms.contains(symptom),
           );
 
           return SingleChildScrollView(
@@ -98,8 +120,41 @@ class _AiSymptomCheckerScreenState extends State<AiSymptomCheckerScreen> {
                   ),
                 ),
                 const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: symptomSearchController,
+                        textInputAction: TextInputAction.search,
+                        onSubmitted: (_) => searchSymptoms(),
+                        decoration: InputDecoration(
+                          hintText: 'Search symptoms, e.g. fever',
+                          prefixIcon: const Icon(Icons.search),
+                          suffixIcon: symptomSearchController.text.isEmpty
+                              ? null
+                              : IconButton(
+                                  onPressed: () {
+                                    symptomSearchController.clear();
+                                    searchSymptoms();
+                                  },
+                                  icon: const Icon(Icons.close),
+                                ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    ElevatedButton.icon(
+                      onPressed: searchSymptoms,
+                      icon: const Icon(Icons.search),
+                      label: const Text('Search'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
                 if (symptoms.isEmpty)
-                  const Text('No symptom rules are currently available.')
+                  Text(symptomQuery.isEmpty
+                      ? 'No symptom rules are currently available.'
+                      : 'No symptoms match your search.')
                 else
                   Wrap(
                     spacing: 9,
@@ -281,7 +336,9 @@ class _AiSymptomCheckerScreenState extends State<AiSymptomCheckerScreen> {
                         doctorName: doctor.name,
                         specialty: doctor.specialty,
                         rating: doctor.rating.toString(),
-                        available: doctor.availableSlots.join(', '),
+                        available: doctor.availableSlots
+                            .map(availabilitySlotLabel)
+                            .join(', '),
                       );
                     },
                   ),

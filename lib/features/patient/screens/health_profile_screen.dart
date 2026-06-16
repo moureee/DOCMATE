@@ -115,6 +115,8 @@ class _HealthProfileScreenState extends State<HealthProfileScreen> {
             padding: const EdgeInsets.all(18),
             child: Column(
               children: [
+                buildPurposeCard(),
+                const SizedBox(height: 18),
                 buildBmiCard(profile),
                 const SizedBox(height: 20),
                 TextField(
@@ -181,6 +183,30 @@ class _HealthProfileScreenState extends State<HealthProfileScreen> {
             ),
           );
         },
+      ),
+    );
+  }
+
+  Widget buildPurposeCard() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: Colors.grey.shade300),
+      ),
+      child: const Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.edit_note, color: AppColors.primaryDark),
+          SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Health Profile is your editable medical-information record. Update height, weight, blood group, and allergies here. Your Health Card uses this information to create a quick read-only summary.',
+            ),
+          ),
+        ],
       ),
     );
   }

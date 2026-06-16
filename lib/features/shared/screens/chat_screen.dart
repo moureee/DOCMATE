@@ -67,6 +67,7 @@ class _ChatScreenState extends State<ChatScreen> {
     return AnimatedBuilder(
       animation: appData,
       builder: (context, child) {
+        final partners = appData.chatPartners;
         final hasPartner = appData.activeChatPartnerId.isNotEmpty;
 
         return Scaffold(
@@ -75,7 +76,9 @@ class _ChatScreenState extends State<ChatScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  appData.activeChatPartnerName,
+                  hasPartner
+                      ? appData.activeChatPartnerName
+                      : 'Patient–Doctor Chat',
                   style: const TextStyle(fontSize: 17),
                 ),
                 if (appData.activeChatPartnerSubtitle.isNotEmpty)
@@ -99,6 +102,34 @@ class _ChatScreenState extends State<ChatScreen> {
           body: hasPartner
               ? Column(
                   children: [
+                    if (partners.length > 1)
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.fromLTRB(14, 10, 14, 8),
+                        color: AppColors.lightMint,
+                        child: DropdownButtonFormField<String>(
+                          initialValue: appData.activeChatPartnerId,
+                          decoration: InputDecoration(
+                            labelText: appData.currentUserRole == 'doctor'
+                                ? 'Select patient'
+                                : 'Select doctor',
+                            prefixIcon: const Icon(Icons.people_outline),
+                          ),
+                          items: partners.map((partner) {
+                            return DropdownMenuItem<String>(
+                              value: partner.id,
+                              child: Text(partner.name),
+                            );
+                          }).toList(),
+                          onChanged: (value) {
+                            if (value == null) return;
+                            final partner = partners.firstWhere(
+                              (item) => item.id == value,
+                            );
+                            appData.selectChatPartner(partner);
+                          },
+                        ),
+                      ),
                     Expanded(
                       child: appData.chatMessages.isEmpty
                           ? const Center(
@@ -212,11 +243,13 @@ class _ChatScreenState extends State<ChatScreen> {
                     ),
                   ],
                 )
-              : const Center(
+              : Center(
                   child: Padding(
-                    padding: EdgeInsets.all(24),
+                    padding: const EdgeInsets.all(24),
                     child: Text(
-                      'Book or accept an appointment first. Chat becomes available between connected patients and doctors.',
+                      appData.currentUserRole == 'doctor'
+                          ? 'Accept a patient appointment first. Chat will then appear here for the doctor and patient.'
+                          : 'Book an appointment first. Chat becomes available between you and the connected doctor.',
                       textAlign: TextAlign.center,
                     ),
                   ),
