@@ -19,6 +19,7 @@ dependencies:
   url_launcher: ^6.2.5
   geolocator: ^13.0.2        # ← লোকেশন ট্র্যাকিংয়ের জন্য যুক্ত করা হয়েছে
   permission_handler: ^11.3.1 # ← ইউজার থেকে সহজে পারমিশন নেওয়ার জন্য যুক্ত করা হয়েছে
+  google_maps_flutter: ^2.17.1
 
 dev_dependencies:
   flutter_test:

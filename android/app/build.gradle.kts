@@ -8,6 +8,12 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+val localPropertiesForMaps = java.util.Properties()
+val localPropertiesFileForMaps = rootProject.file("local.properties")
+if (localPropertiesFileForMaps.exists()) {
+    localPropertiesFileForMaps.inputStream().use { localPropertiesForMaps.load(it) }
+}
+val mapsApiKey: String = localPropertiesForMaps.getProperty("MAPS_API_KEY") ?: ""
 android {
     namespace = "com.example.docmate"
     compileSdk = flutter.compileSdkVersion
@@ -31,6 +37,7 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        manifestPlaceholders["MAPS_API_KEY"] = mapsApiKey
     }
 
     buildTypes {

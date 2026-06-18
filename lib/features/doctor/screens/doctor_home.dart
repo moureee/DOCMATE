@@ -162,88 +162,127 @@ class DoctorHome extends StatelessWidget {
   }
 
   Widget buildHeader(BuildContext context, DoctorModel doctor) {
+    final unreadCount = AppData.instance.notifications.where((notification) {
+      return !notification.read;
+    }).length;
+
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: AppColors.primary,
         borderRadius: BorderRadius.circular(24),
       ),
-      child: Row(
-        children: [
-          const CircleAvatar(
-            radius: 38,
-            backgroundColor: Colors.white,
-            child: Icon(
-              Icons.medical_services,
-              size: 40,
-              color: AppColors.primaryDark,
-            ),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Welcome,',
-                  style: TextStyle(
-                    color: Colors.black54,
-                  ),
-                ),
-                Text(
-                  doctor.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 21,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  doctor.specialty,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '⭐ ${doctor.rating} • '
-                  '${doctor.experience} years',
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 8),
-          Wrap(
-            spacing: 6,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final compact = constraints.maxWidth < 520;
+
+          final doctorInfo = Row(
             children: [
-              buildHeaderAction(
-                context: context,
-                tooltip: 'Notifications',
-                label: 'Alerts',
-                icon: Icons.notifications_none,
-                screen: const NotificationsScreen(),
-                badgeCount: AppData.instance.notifications
-                    .where((notification) => !notification.read)
-                    .length,
+              CircleAvatar(
+                radius: compact ? 30 : 38,
+                backgroundColor: Colors.white,
+                child: const Icon(
+                  Icons.medical_services,
+                  size: 38,
+                  color: AppColors.primaryDark,
+                ),
               ),
-              buildHeaderAction(
-                context: context,
-                tooltip: 'Settings',
-                label: 'Settings',
-                icon: Icons.settings_outlined,
-                screen: const SettingsScreen(),
-              ),
-              buildHeaderAction(
-                context: context,
-                tooltip: 'Edit doctor profile',
-                label: 'Profile',
-                icon: Icons.manage_accounts_outlined,
-                screen: const EditAccountProfileScreen(),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Welcome,',
+                      style: TextStyle(
+                        color: Colors.black54,
+                        fontSize: 13,
+                      ),
+                    ),
+                    Text(
+                      doctor.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: compact ? 19 : 21,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      doctor.specialty,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      '⭐  •  years',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
               ),
             ],
-          ),
-        ],
+          );
+
+          final actions = Row(
+            children: [
+              Expanded(
+                child: buildHeaderAction(
+                  context: context,
+                  tooltip: 'Notifications',
+                  label: 'Alerts',
+                  icon: Icons.notifications_none,
+                  screen: const NotificationsScreen(),
+                  badgeCount: unreadCount,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: buildHeaderAction(
+                  context: context,
+                  tooltip: 'Settings',
+                  label: 'Settings',
+                  icon: Icons.settings_outlined,
+                  screen: const SettingsScreen(),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: buildHeaderAction(
+                  context: context,
+                  tooltip: 'Edit doctor profile',
+                  label: 'Profile',
+                  icon: Icons.manage_accounts_outlined,
+                  screen: const EditAccountProfileScreen(),
+                ),
+              ),
+            ],
+          );
+
+          if (compact) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                doctorInfo,
+                const SizedBox(height: 16),
+                actions,
+              ],
+            );
+          }
+
+          return Row(
+            children: [
+              Expanded(child: doctorInfo),
+              const SizedBox(width: 18),
+              SizedBox(
+                width: 330,
+                child: actions,
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -256,51 +295,69 @@ class DoctorHome extends StatelessWidget {
     required Widget screen,
     int badgeCount = 0,
   }) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Stack(
-          clipBehavior: Clip.none,
+    return InkWell(
+      borderRadius: BorderRadius.circular(16),
+      onTap: () {
+        openScreen(context, screen);
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+          horizontal: 6,
+          vertical: 10,
+        ),
+        decoration: BoxDecoration(
+          color: const Color(0xEFFFFFFF),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            IconButton.filledTonal(
-              tooltip: tooltip,
-              onPressed: () {
-                openScreen(context, screen);
-              },
-              icon: Icon(icon),
-            ),
-            if (badgeCount > 0)
-              Positioned(
-                right: 2,
-                top: 2,
-                child: Container(
-                  width: 18,
-                  height: 18,
-                  alignment: Alignment.center,
-                  decoration: const BoxDecoration(
-                    color: AppColors.danger,
-                    shape: BoxShape.circle,
-                  ),
-                  child: Text(
-                    badgeCount > 9 ? '9+' : badgeCount.toString(),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 9,
-                      fontWeight: FontWeight.bold,
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Icon(
+                  icon,
+                  size: 26,
+                  color: AppColors.dark,
+                ),
+                if (badgeCount > 0)
+                  Positioned(
+                    right: -8,
+                    top: -8,
+                    child: Container(
+                      width: 19,
+                      height: 19,
+                      alignment: Alignment.center,
+                      decoration: const BoxDecoration(
+                        color: AppColors.danger,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Text(
+                        badgeCount > 9 ? '9+' : badgeCount.toString(),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 9,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                     ),
                   ),
+              ],
+            ),
+            const SizedBox(height: 5),
+            FittedBox(
+              child: Text(
+                label,
+                maxLines: 1,
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
+            ),
           ],
         ),
-        Text(
-          label,
-          style: const TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      ],
+      ),
     );
   }
 
