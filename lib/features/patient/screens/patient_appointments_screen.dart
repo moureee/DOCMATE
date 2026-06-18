@@ -398,9 +398,6 @@ class _PatientAppointmentsScreenState extends State<PatientAppointmentsScreen> {
     }
 
     final selectedDoctorId = selectedDoctor.id;
-    if (selectedDoctorId == null) {
-      return;
-    }
 
     final selectedTime = await showDialog<String>(
       context: context,
