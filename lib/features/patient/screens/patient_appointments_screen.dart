@@ -397,7 +397,7 @@ class _PatientAppointmentsScreenState extends State<PatientAppointmentsScreen> {
       return;
     }
 
-    final selectedDoctorId = selectedDoctor?.id;
+    final selectedDoctorId = selectedDoctor.id;
     if (selectedDoctorId == null) {
       return;
     }
