@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import 'package:docmate/core/theme/app_theme.dart';
 import 'package:docmate/data/app_data.dart';
+import 'package:docmate/features/patient/screens/book_appointment_screen.dart';
 import 'package:docmate/features/patient/screens/health_card_screen.dart';
 import 'package:docmate/features/patient/screens/health_profile_screen.dart';
 import 'package:docmate/features/auth/screens/intro_screen.dart';
@@ -92,6 +93,22 @@ class PatientProfileScreen extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 18),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const BookAppointmentScreen(),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.calendar_month),
+              label: const Text('Book Appointment'),
+            ),
+          ),
+          const SizedBox(height: 12),
           buildMenuTile(
             context: context,
             icon: Icons.health_and_safety,

@@ -8,6 +8,8 @@ import 'package:docmate/features/doctor/screens/doctor_insights_screen.dart';
 import 'package:docmate/features/doctor/screens/doctor_patient_info_screen.dart';
 import 'package:docmate/features/doctor/screens/prescription_management_screen.dart';
 import 'package:docmate/features/shared/screens/chat_screen.dart';
+import 'package:docmate/features/shared/screens/overall_analytics_screen.dart';
+import 'package:docmate/features/shared/screens/edit_account_profile_screen.dart';
 
 class DoctorHome extends StatelessWidget {
   const DoctorHome({super.key});
@@ -336,11 +338,23 @@ class DoctorHome extends StatelessWidget {
         ),
         buildServiceCard(
           context: context,
-          title: 'Basic Insights',
+          title: 'Today Insights',
           icon: Icons.analytics_outlined,
           screen: DoctorInsightsScreen(
             doctor: doctor,
           ),
+        ),
+        buildServiceCard(
+          context: context,
+          title: 'Overall Analytics',
+          icon: Icons.query_stats,
+          screen: const OverallAnalyticsScreen(),
+        ),
+        buildServiceCard(
+          context: context,
+          title: 'Edit Profile',
+          icon: Icons.manage_accounts_outlined,
+          screen: const EditAccountProfileScreen(),
         ),
         buildAverageTimeCard(doctor),
       ],

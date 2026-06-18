@@ -6,6 +6,7 @@ import 'package:docmate/features/shared/screens/ai_symptom_checker_screen.dart';
 import 'package:docmate/features/shared/screens/chat_screen.dart';
 import 'package:docmate/features/doctor/screens/doctor_profile_screen.dart';
 import 'package:docmate/features/shared/screens/emergency_screen.dart';
+import 'package:docmate/features/patient/screens/book_appointment_screen.dart';
 import 'package:docmate/features/patient/screens/health_card_screen.dart';
 import 'package:docmate/features/patient/screens/health_profile_screen.dart';
 import 'package:docmate/features/patient/screens/medicine_screen.dart';
@@ -118,6 +119,17 @@ class _PatientHomeState extends State<PatientHome> {
                   buildHeader(),
                   const SizedBox(height: 18),
                   buildSearchSection(),
+                  const SizedBox(height: 14),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        openScreen(const BookAppointmentScreen());
+                      },
+                      icon: const Icon(Icons.calendar_month),
+                      label: const Text('Book an Appointment'),
+                    ),
+                  ),
                   if (searchText.trim().isNotEmpty) ...[
                     const SizedBox(height: 16),
                     buildSectionTitle('Search Results'),

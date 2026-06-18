@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:docmate/core/theme/app_theme.dart';
 import 'package:docmate/data/app_data.dart';
 
-class DoctorPatientInfoScreen extends StatelessWidget {
+class DoctorPatientInfoScreen extends StatefulWidget {
   const DoctorPatientInfoScreen({
     super.key,
     required this.doctor,
@@ -12,19 +12,40 @@ class DoctorPatientInfoScreen extends StatelessWidget {
   final DoctorModel doctor;
 
   @override
+  State<DoctorPatientInfoScreen> createState() =>
+      _DoctorPatientInfoScreenState();
+}
+
+class _DoctorPatientInfoScreenState extends State<DoctorPatientInfoScreen> {
+  String sort = 'name';
+
+  @override
   Widget build(BuildContext context) {
     final appData = AppData.instance;
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Patient Information'),
+        actions: [
+          PopupMenuButton<String>(
+            tooltip: 'Sort patients',
+            initialValue: sort,
+            onSelected: (value) => setState(() => sort = value),
+            itemBuilder: (_) => const [
+              PopupMenuItem(value: 'name', child: Text('Patient name')),
+              PopupMenuItem(value: 'latest', child: Text('Latest appointment')),
+              PopupMenuItem(value: 'visits', child: Text('Most appointments')),
+            ],
+            icon: const Icon(Icons.sort),
+          ),
+        ],
       ),
       body: AnimatedBuilder(
         animation: appData,
         builder: (context, child) {
           final appointments = appData.appointments.where(
             (appointment) {
-              return appointment.doctorId == doctor.id;
+              return appointment.doctorId == widget.doctor.id;
             },
           ).toList();
 
@@ -35,8 +56,31 @@ class DoctorPatientInfoScreen extends StatelessWidget {
           final patientNames = appointments
               .map((appointment) => appointment.patientName)
               .toSet()
-              .toList()
-            ..sort();
+              .toList();
+
+          patientNames.sort((first, second) {
+            if (sort == 'visits') {
+              final firstCount = appointments
+                  .where((appointment) => appointment.patientName == first)
+                  .length;
+              final secondCount = appointments
+                  .where((appointment) => appointment.patientName == second)
+                  .length;
+              return secondCount.compareTo(firstCount);
+            }
+            if (sort == 'latest') {
+              final firstLatest = appointments
+                  .where((appointment) => appointment.patientName == first)
+                  .map((appointment) => appointment.date)
+                  .reduce((a, b) => a.isAfter(b) ? a : b);
+              final secondLatest = appointments
+                  .where((appointment) => appointment.patientName == second)
+                  .map((appointment) => appointment.date)
+                  .reduce((a, b) => a.isAfter(b) ? a : b);
+              return secondLatest.compareTo(firstLatest);
+            }
+            return first.toLowerCase().compareTo(second.toLowerCase());
+          });
 
           if (patientNames.isEmpty) {
             return const Center(

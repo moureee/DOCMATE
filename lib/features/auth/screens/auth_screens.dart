@@ -1,4 +1,4 @@
-﻿import 'package:flutter/foundation.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -74,16 +74,17 @@ Future<void> createUserRecords({
   String specialty = 'Not set',
   String loginMethod = 'email',
 }) async {
-  String fullName = '$firstName $lastName'.trim();
-
+  var fullName = '$firstName $lastName'.trim();
   if (fullName.isEmpty) {
     fullName = role == 'doctor' ? 'New Doctor' : 'New Patient';
   }
 
-  String email = user.email ?? '';
-  String phone = user.phoneNumber ?? '';
+  final email = user.email ?? '';
+  final phone = user.phoneNumber ?? '';
+  final firestore = FirebaseFirestore.instance;
+  final batch = firestore.batch();
 
-  await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+  batch.set(firestore.collection('users').doc(user.uid), {
     'uid': user.uid,
     'firstName': firstName,
     'lastName': lastName,
@@ -93,6 +94,7 @@ Future<void> createUserRecords({
     'role': role,
     'loginMethod': loginMethod,
     'isActive': true,
+    'accountStatus': role == 'doctor' ? 'pending' : 'active',
     'createdAt': FieldValue.serverTimestamp(),
     if (role == 'doctor') 'specialty': specialty,
     if (role == 'doctor') 'designation': specialty,
@@ -100,10 +102,7 @@ Future<void> createUserRecords({
   });
 
   if (role == 'patient') {
-    await FirebaseFirestore.instance
-        .collection('health_profiles')
-        .doc(user.uid)
-        .set({
+    batch.set(firestore.collection('health_profiles').doc(user.uid), {
       'uid': user.uid,
       'height': '',
       'weight': '',
@@ -115,7 +114,7 @@ Future<void> createUserRecords({
   }
 
   if (role == 'doctor') {
-    await FirebaseFirestore.instance.collection('doctors').doc(user.uid).set({
+    batch.set(firestore.collection('doctors').doc(user.uid), {
       'uid': user.uid,
       'name': fullName,
       'email': email,
@@ -127,11 +126,16 @@ Future<void> createUserRecords({
       'ratingCount': 0,
       'available': true,
       'availableSlots': <String>[],
-      'averageConsultationMinutes': 12,
+      'weeklySchedule': <String, dynamic>{},
+      'scheduleExceptions': <String, dynamic>{},
+      'averageConsultationMinutes': 30,
       'approved': false,
+      'accountStatus': 'pending',
       'createdAt': FieldValue.serverTimestamp(),
     });
   }
+
+  await batch.commit();
 }
 
 class AuthLoginScreen extends StatefulWidget {
@@ -373,7 +377,7 @@ class _AuthLoginScreenState extends State<AuthLoginScreen> {
               ),
               const SizedBox(width: 22),
               SocialCircleButton(
-                text: 'â˜Ž',
+                icon: Icons.phone_android,
                 color: const Color(0xFF00D9B8),
                 onTap: isLoading ? null : openPhoneLogin,
               ),
@@ -714,7 +718,7 @@ class _AuthSignupScreenState extends State<AuthSignupScreen> {
               ),
               const SizedBox(width: 22),
               SocialCircleButton(
-                text: 'â˜Ž',
+                icon: Icons.phone_android,
                 color: const Color(0xFF00D9B8),
                 onTap: isLoading ? null : openPhoneSignup,
               ),
@@ -1193,13 +1197,7 @@ class AuthHeader extends StatelessWidget {
   }
 }
 
-class AuthTextField extends StatelessWidget {
-  final TextEditingController controller;
-  final String hintText;
-  final IconData icon;
-  final bool obscureText;
-  final TextInputType keyboardType;
-
+class AuthTextField extends StatefulWidget {
   const AuthTextField({
     super.key,
     required this.controller,
@@ -1208,6 +1206,25 @@ class AuthTextField extends StatelessWidget {
     this.obscureText = false,
     this.keyboardType = TextInputType.text,
   });
+
+  final TextEditingController controller;
+  final String hintText;
+  final IconData icon;
+  final bool obscureText;
+  final TextInputType keyboardType;
+
+  @override
+  State<AuthTextField> createState() => _AuthTextFieldState();
+}
+
+class _AuthTextFieldState extends State<AuthTextField> {
+  late bool hidden;
+
+  @override
+  void initState() {
+    super.initState();
+    hidden = widget.obscureText;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1225,12 +1242,23 @@ class AuthTextField extends StatelessWidget {
         ],
       ),
       child: TextField(
-        controller: controller,
-        obscureText: obscureText,
-        keyboardType: keyboardType,
+        controller: widget.controller,
+        obscureText: hidden,
+        keyboardType: widget.keyboardType,
         decoration: InputDecoration(
-          prefixIcon: Icon(icon, size: 20),
-          hintText: hintText,
+          prefixIcon: Icon(widget.icon, size: 20),
+          suffixIcon: widget.obscureText
+              ? IconButton(
+                  tooltip: hidden ? 'Show password' : 'Hide password',
+                  onPressed: () => setState(() => hidden = !hidden),
+                  icon: Icon(
+                    hidden
+                        ? Icons.visibility_outlined
+                        : Icons.visibility_off_outlined,
+                  ),
+                )
+              : null,
+          hintText: widget.hintText,
           hintStyle: const TextStyle(fontSize: 12),
           border: InputBorder.none,
           contentPadding: const EdgeInsets.only(top: 14),
@@ -1284,16 +1312,18 @@ class AuthButton extends StatelessWidget {
 }
 
 class SocialCircleButton extends StatelessWidget {
-  final String text;
-  final Color color;
-  final VoidCallback? onTap;
-
   const SocialCircleButton({
     super.key,
-    required this.text,
+    this.text,
+    this.icon,
     required this.color,
     required this.onTap,
-  });
+  }) : assert(text != null || icon != null);
+
+  final String? text;
+  final IconData? icon;
+  final Color color;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -1314,14 +1344,16 @@ class SocialCircleButton extends StatelessWidget {
           ],
         ),
         child: Center(
-          child: Text(
-            text,
-            style: TextStyle(
-              fontSize: 32,
-              fontWeight: FontWeight.bold,
-              color: color,
-            ),
-          ),
+          child: icon != null
+              ? Icon(icon, size: 30, color: color)
+              : Text(
+                  text ?? '',
+                  style: TextStyle(
+                    fontSize: 32,
+                    fontWeight: FontWeight.bold,
+                    color: color,
+                  ),
+                ),
         ),
       ),
     );

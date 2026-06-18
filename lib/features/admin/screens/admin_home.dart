@@ -8,6 +8,8 @@ import 'package:docmate/features/admin/screens/admin_emergency_requests_screen.d
 import 'package:docmate/features/admin/screens/admin_management_screens.dart';
 import 'package:docmate/features/admin/screens/admin_symptom_rules_screen.dart';
 import 'package:docmate/features/auth/screens/intro_screen.dart';
+import 'package:docmate/features/shared/screens/overall_analytics_screen.dart';
+import 'package:docmate/features/shared/screens/edit_account_profile_screen.dart';
 
 class AdminHome extends StatelessWidget {
   const AdminHome({super.key});
@@ -67,7 +69,18 @@ class AdminHome extends StatelessWidget {
               },
             ).length;
 
-            final emergencyUsage = appData.emergencyRequestCount;
+            final now = DateTime.now();
+            bool isToday(DateTime date) =>
+                date.year == now.year &&
+                date.month == now.month &&
+                date.day == now.day;
+            final todayBookings = appData.appointments
+                .where((appointment) => isToday(appointment.date))
+                .length;
+            final todayEmergencyUsage = appData.emergencyRequests
+                .where((request) => isToday(request.createdAt))
+                .length;
+            final todayUsers = appData.todayUserCount;
 
             return ListView(
               padding: const EdgeInsets.all(18),
@@ -75,11 +88,9 @@ class AdminHome extends StatelessWidget {
                 buildHeader(context),
                 const SizedBox(height: 22),
                 buildDashboardStats(
-                  users: appData.totalUserCount > 0
-                      ? appData.totalUserCount
-                      : appData.patients.length + appData.doctors.length,
-                  bookings: appData.appointments.length,
-                  emergencyUsage: emergencyUsage,
+                  users: todayUsers,
+                  bookings: todayBookings,
+                  emergencyUsage: todayEmergencyUsage,
                 ),
                 const SizedBox(height: 24),
                 buildDoctorSummary(
@@ -160,7 +171,7 @@ class AdminHome extends StatelessWidget {
       children: [
         Expanded(
           child: buildStatCard(
-            title: 'Users',
+            title: "Today's Users",
             value: users.toString(),
             icon: Icons.people,
           ),
@@ -168,7 +179,7 @@ class AdminHome extends StatelessWidget {
         const SizedBox(width: 10),
         Expanded(
           child: buildStatCard(
-            title: 'Bookings',
+            title: "Today's Bookings",
             value: bookings.toString(),
             icon: Icons.calendar_month,
           ),
@@ -176,7 +187,7 @@ class AdminHome extends StatelessWidget {
         const SizedBox(width: 10),
         Expanded(
           child: buildStatCard(
-            title: 'Emergency',
+            title: "Today's Emergency",
             value: emergencyUsage.toString(),
             icon: Icons.emergency,
           ),
@@ -349,6 +360,16 @@ class AdminHome extends StatelessWidget {
         title: 'Symptom Rules',
         icon: Icons.psychology,
         screen: AdminSymptomRulesScreen(),
+      ),
+      AdminManagementItem(
+        title: 'Overall Analytics',
+        icon: Icons.query_stats,
+        screen: OverallAnalyticsScreen(),
+      ),
+      AdminManagementItem(
+        title: 'Admin Profile',
+        icon: Icons.manage_accounts_outlined,
+        screen: EditAccountProfileScreen(),
       ),
     ];
 

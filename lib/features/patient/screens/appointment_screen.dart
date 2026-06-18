@@ -59,6 +59,16 @@ class _AppointmentScreenState extends State<AppointmentScreen> {
       return;
     }
 
+    if (AppData.instance.isSlotBooked(
+      widget.doctor.id,
+      selectedDate,
+      selectedTime!,
+    )) {
+      showMessage('That appointment time is already booked. Choose another.');
+      setState(() => selectedTime = null);
+      return;
+    }
+
     if (symptomsController.text.trim().isEmpty) {
       showMessage('Please write your symptoms.');
       return;
@@ -183,16 +193,24 @@ class _AppointmentScreenState extends State<AppointmentScreen> {
                     spacing: 10,
                     runSpacing: 10,
                     children: times.map((time) {
+                      final isBooked = AppData.instance.isSlotBooked(
+                        widget.doctor.id,
+                        selectedDate,
+                        time,
+                      );
                       final isSelected = selectedTime == time;
                       return ChoiceChip(
-                        label: Text(time),
+                        label: Text(isBooked ? '$time • Booked' : time),
                         selected: isSelected,
                         selectedColor: AppColors.primary,
-                        onSelected: (_) {
-                          setState(() {
-                            selectedTime = time;
-                          });
-                        },
+                        disabledColor: Colors.grey.shade300,
+                        onSelected: isBooked
+                            ? null
+                            : (_) {
+                                setState(() {
+                                  selectedTime = time;
+                                });
+                              },
                       );
                     }).toList(),
                   ),

@@ -3,13 +3,17 @@ import 'package:flutter/material.dart';
 import 'package:docmate/core/theme/app_theme.dart';
 import 'package:docmate/data/app_data.dart';
 
-class DoctorAppointmentsScreen extends StatelessWidget {
+class DoctorAppointmentsScreen extends StatefulWidget {
   const DoctorAppointmentsScreen({super.key});
 
-  DoctorModel? getCurrentDoctor() {
-    final appData = AppData.instance;
-    return appData.currentDoctor;
-  }
+  @override
+  State<DoctorAppointmentsScreen> createState() =>
+      _DoctorAppointmentsScreenState();
+}
+
+class _DoctorAppointmentsScreenState extends State<DoctorAppointmentsScreen> {
+  String sort = 'date_asc';
+  String statusFilter = 'All';
 
   @override
   Widget build(BuildContext context) {
@@ -18,45 +22,96 @@ class DoctorAppointmentsScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Manage Appointments'),
+        actions: [
+          PopupMenuButton<String>(
+            tooltip: 'Sort appointments',
+            initialValue: sort,
+            onSelected: (value) => setState(() => sort = value),
+            itemBuilder: (_) => const [
+              PopupMenuItem(
+                  value: 'date_asc', child: Text('Date: earliest first')),
+              PopupMenuItem(
+                  value: 'date_desc', child: Text('Date: latest first')),
+              PopupMenuItem(value: 'patient', child: Text('Patient name')),
+              PopupMenuItem(value: 'status', child: Text('Status')),
+            ],
+            icon: const Icon(Icons.sort),
+          ),
+        ],
       ),
       body: AnimatedBuilder(
         animation: appData,
         builder: (context, child) {
-          final doctor = getCurrentDoctor();
-
+          final doctor = appData.currentDoctor;
           if (doctor == null) {
-            return const Center(
-              child: CircularProgressIndicator(),
-            );
+            return const Center(child: CircularProgressIndicator());
           }
 
-          final appointments = appData.appointments.where(
-            (appointment) {
-              return appointment.doctorId == doctor.id;
-            },
-          ).toList();
-
-          appointments.sort(
-            (first, second) {
-              return first.date.compareTo(second.date);
-            },
-          );
-
-          if (appointments.isEmpty) {
-            return const Center(
-              child: Text('No appointments found.'),
-            );
+          var appointments = appData.appointments
+              .where((appointment) => appointment.doctorId == doctor.id)
+              .toList();
+          if (statusFilter != 'All') {
+            appointments = appointments
+                .where((appointment) => appointment.status == statusFilter)
+                .toList();
           }
 
-          return ListView.builder(
-            padding: const EdgeInsets.all(18),
-            itemCount: appointments.length,
-            itemBuilder: (context, index) {
-              return buildAppointmentCard(
-                context,
-                appointments[index],
-              );
-            },
+          switch (sort) {
+            case 'date_desc':
+              appointments.sort((a, b) => b.date.compareTo(a.date));
+              break;
+            case 'patient':
+              appointments
+                  .sort((a, b) => a.patientName.compareTo(b.patientName));
+              break;
+            case 'status':
+              appointments.sort((a, b) => a.status.compareTo(b.status));
+              break;
+            default:
+              appointments.sort((a, b) => a.date.compareTo(b.date));
+          }
+
+          return Column(
+            children: [
+              SizedBox(
+                height: 54,
+                child: ListView(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  scrollDirection: Axis.horizontal,
+                  children: [
+                    'All',
+                    'Pending',
+                    'Accepted',
+                    'Completed',
+                    'Cancelled',
+                    'Rejected'
+                  ]
+                      .map(
+                        (status) => Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: ChoiceChip(
+                            label: Text(status),
+                            selected: statusFilter == status,
+                            onSelected: (_) =>
+                                setState(() => statusFilter = status),
+                          ),
+                        ),
+                      )
+                      .toList(),
+                ),
+              ),
+              Expanded(
+                child: appointments.isEmpty
+                    ? const Center(child: Text('No appointments found.'))
+                    : ListView.builder(
+                        padding: const EdgeInsets.all(18),
+                        itemCount: appointments.length,
+                        itemBuilder: (context, index) =>
+                            buildAppointmentCard(context, appointments[index]),
+                      ),
+              ),
+            ],
           );
         },
       ),

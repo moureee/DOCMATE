@@ -88,22 +88,40 @@ List<String> availabilityTimesForDate(
   DateTime date,
 ) {
   final requestedKey = _dateKey(date);
-  final times = doctor.availableSlots
-      .where((slot) {
-        final slotDate = availabilitySlotDate(slot);
-        return slotDate == null || _dateKey(slotDate) == requestedKey;
-      })
-      .map(availabilitySlotTime)
-      .where((time) => time.isNotEmpty)
-      .toSet()
-      .toList();
+  final exception = doctor.scheduleExceptions[requestedKey];
 
-  times.sort((first, second) {
+  if (exception?.unavailable == true) {
+    return <String>[];
+  }
+
+  final times = <String>{};
+
+  if (exception != null && exception.customTimes.isNotEmpty) {
+    times.addAll(exception.customTimes);
+  } else {
+    final weeklyRule = doctor.weeklySchedule[date.weekday];
+    if (weeklyRule != null) {
+      times.addAll(_generateTimesForRule(date, weeklyRule));
+    }
+
+    times.addAll(
+      doctor.availableSlots
+          .where((slot) {
+            final slotDate = availabilitySlotDate(slot);
+            return slotDate == null || _dateKey(slotDate) == requestedKey;
+          })
+          .map(availabilitySlotTime)
+          .where((time) => time.isNotEmpty),
+    );
+  }
+
+  final result = times.toList();
+  result.sort((first, second) {
     final firstDate = _combineDateAndTime(date, first);
     final secondDate = _combineDateAndTime(date, second);
     return firstDate.compareTo(secondDate);
   });
-  return times;
+  return result;
 }
 
 String _safeKey(String value) {
@@ -141,6 +159,120 @@ DateTime _combineDateAndTime(DateTime date, String timeText) {
   return DateTime(date.year, date.month, date.day, 9);
 }
 
+class DoctorDaySchedule {
+  const DoctorDaySchedule({
+    required this.enabled,
+    required this.startTime,
+    required this.endTime,
+    required this.slotMinutes,
+  });
+
+  final bool enabled;
+  final String startTime;
+  final String endTime;
+  final int slotMinutes;
+
+  factory DoctorDaySchedule.fromMap(Map<String, dynamic> data) {
+    return DoctorDaySchedule(
+      enabled: data['enabled'] == true,
+      startTime: (data['startTime'] ?? '09:00 AM').toString(),
+      endTime: (data['endTime'] ?? '05:00 PM').toString(),
+      slotMinutes: _readInt(data['slotMinutes'], 30).clamp(10, 180).toInt(),
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return <String, dynamic>{
+      'enabled': enabled,
+      'startTime': startTime,
+      'endTime': endTime,
+      'slotMinutes': slotMinutes,
+    };
+  }
+}
+
+class ScheduleException {
+  const ScheduleException({
+    required this.unavailable,
+    required this.customTimes,
+    this.note = '',
+  });
+
+  final bool unavailable;
+  final List<String> customTimes;
+  final String note;
+
+  factory ScheduleException.fromMap(Map<String, dynamic> data) {
+    return ScheduleException(
+      unavailable: data['unavailable'] == true,
+      customTimes: _readStringList(data['customTimes']),
+      note: (data['note'] ?? '').toString(),
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return <String, dynamic>{
+      'unavailable': unavailable,
+      'customTimes': customTimes,
+      'note': note,
+    };
+  }
+}
+
+Map<int, DoctorDaySchedule> _readWeeklySchedule(dynamic value) {
+  final result = <int, DoctorDaySchedule>{};
+  if (value is Map) {
+    value.forEach((key, item) {
+      final weekday = int.tryParse(key.toString());
+      if (weekday == null || weekday < 1 || weekday > 7 || item is! Map) {
+        return;
+      }
+      result[weekday] = DoctorDaySchedule.fromMap(
+        Map<String, dynamic>.from(item),
+      );
+    });
+  }
+  return result;
+}
+
+Map<String, ScheduleException> _readScheduleExceptions(dynamic value) {
+  final result = <String, ScheduleException>{};
+  if (value is Map) {
+    value.forEach((key, item) {
+      if (item is! Map) return;
+      result[key.toString()] = ScheduleException.fromMap(
+        Map<String, dynamic>.from(item),
+      );
+    });
+  }
+  return result;
+}
+
+List<String> _generateTimesForRule(
+  DateTime date,
+  DoctorDaySchedule rule,
+) {
+  if (!rule.enabled) return <String>[];
+  final start = _combineDateAndTime(date, rule.startTime);
+  final end = _combineDateAndTime(date, rule.endTime);
+  if (!end.isAfter(start)) return <String>[];
+
+  final result = <String>[];
+  var cursor = start;
+  while (cursor.isBefore(end)) {
+    final hour = cursor.hour;
+    final minute = cursor.minute;
+    final period = hour >= 12 ? 'PM' : 'AM';
+    final displayHour = hour == 0 ? 12 : (hour > 12 ? hour - 12 : hour);
+    result.add(
+      '${displayHour.toString().padLeft(2, '0')}:'
+      '${minute.toString().padLeft(2, '0')} $period',
+    );
+    cursor = cursor.add(Duration(minutes: rule.slotMinutes));
+  }
+  return result;
+}
+
 class DoctorModel {
   DoctorModel({
     required this.id,
@@ -159,7 +291,11 @@ class DoctorModel {
     this.hospitalName = '',
     this.qualification = '',
     this.bio = '',
-  });
+    Map<int, DoctorDaySchedule>? weeklySchedule,
+    Map<String, ScheduleException>? scheduleExceptions,
+  })  : weeklySchedule = weeklySchedule ?? <int, DoctorDaySchedule>{},
+        scheduleExceptions =
+            scheduleExceptions ?? <String, ScheduleException>{};
 
   final String id;
   String name;
@@ -177,6 +313,8 @@ class DoctorModel {
   String hospitalName;
   String qualification;
   String bio;
+  Map<int, DoctorDaySchedule> weeklySchedule;
+  Map<String, ScheduleException> scheduleExceptions;
 
   factory DoctorModel.fromFirestore(
     QueryDocumentSnapshot<Map<String, dynamic>> document,
@@ -200,6 +338,8 @@ class DoctorModel {
       hospitalName: (data['hospitalName'] ?? '').toString(),
       qualification: (data['qualification'] ?? '').toString(),
       bio: (data['bio'] ?? '').toString(),
+      weeklySchedule: _readWeeklySchedule(data['weeklySchedule']),
+      scheduleExceptions: _readScheduleExceptions(data['scheduleExceptions']),
     );
   }
 
@@ -222,6 +362,8 @@ class DoctorModel {
     hospitalName = (data['hospitalName'] ?? hospitalName).toString();
     qualification = (data['qualification'] ?? qualification).toString();
     bio = (data['bio'] ?? bio).toString();
+    weeklySchedule = _readWeeklySchedule(data['weeklySchedule']);
+    scheduleExceptions = _readScheduleExceptions(data['scheduleExceptions']);
   }
 }
 
@@ -795,6 +937,7 @@ class AppData extends ChangeNotifier {
       <EmergencyRequestModel>[];
 
   final Set<String> _favoriteDoctorIds = <String>{};
+  final Set<String> _bookedSlotIds = <String>{};
   final Map<String, String> _patientIdByName = <String, String>{};
   final Map<String, HealthProfileModel> _profilesByPatientId =
       <String, HealthProfileModel>{};
@@ -817,6 +960,7 @@ class AppData extends ChangeNotifier {
   String activeChatPartnerSubtitle = '';
   int emergencyRequestCount = 0;
   int totalUserCount = 0;
+  int todayUserCount = 0;
 
   DoctorModel? get currentDoctor {
     for (final doctor in doctors) {
@@ -884,6 +1028,7 @@ class AppData extends ChangeNotifier {
     _subscriptions.add(userSubscription);
 
     _startDoctorListener();
+    _startAppointmentSlotsListener();
     _startHospitalListener();
     _startReviewListener();
     _startSymptomRulesListener();
@@ -911,6 +1056,7 @@ class AppData extends ChangeNotifier {
     symptomRules.clear();
     emergencyRequests.clear();
     _favoriteDoctorIds.clear();
+    _bookedSlotIds.clear();
     _patientIdByName.clear();
     _profilesByPatientId.clear();
     _listeningPatientProfileIds.clear();
@@ -922,6 +1068,7 @@ class AppData extends ChangeNotifier {
     activeChatPartnerSubtitle = '';
     emergencyRequestCount = 0;
     totalUserCount = 0;
+    todayUserCount = 0;
     healthProfile = HealthProfileModel(
       heightCm: 0,
       weightKg: 0,
@@ -994,6 +1141,49 @@ class AppData extends ChangeNotifier {
       },
     );
     _subscriptions.add(subscription);
+  }
+
+  void _startAppointmentSlotsListener() {
+    final subscription = _firestore
+        .collection('appointment_slots')
+        .where('booked', isEqualTo: true)
+        .snapshots()
+        .listen(
+      (snapshot) {
+        _bookedSlotIds
+          ..clear()
+          ..addAll(snapshot.docs.map((document) => document.id));
+        notifyListeners();
+      },
+      onError: (_) {},
+    );
+    _subscriptions.add(subscription);
+  }
+
+  String appointmentSlotId(
+    String doctorId,
+    DateTime date,
+    String time,
+  ) {
+    return '${doctorId}_${_dateKey(date)}_${_safeKey(time)}';
+  }
+
+  bool isSlotBooked(
+    String doctorId,
+    DateTime date,
+    String time, {
+    String? excludingAppointmentId,
+  }) {
+    final slotId = appointmentSlotId(doctorId, date, time);
+    if (!_bookedSlotIds.contains(slotId)) return false;
+    if (excludingAppointmentId == null) return true;
+    return appointments.any(
+      (appointment) =>
+          appointment.slotId == slotId &&
+          appointment.id != excludingAppointmentId &&
+          appointment.status != 'Cancelled' &&
+          appointment.status != 'Rejected',
+    );
   }
 
   void _startReviewListener() {
@@ -1305,6 +1495,15 @@ class AppData extends ChangeNotifier {
     final subscription = _firestore.collection('users').snapshots().listen(
       (snapshot) {
         totalUserCount = snapshot.docs.length;
+        final now = DateTime.now();
+        todayUserCount = snapshot.docs.where((document) {
+          final createdAt = document.data()['createdAt'];
+          if (createdAt is! Timestamp) return false;
+          final date = createdAt.toDate();
+          return date.year == now.year &&
+              date.month == now.month &&
+              date.day == now.day;
+        }).length;
         _patientIdByName.clear();
         final patientNames = <String>[];
         for (final document in snapshot.docs) {
@@ -1649,7 +1848,7 @@ class AppData extends ChangeNotifier {
     }
 
     final appointmentReference = _firestore.collection('appointments').doc();
-    final slotId = '${doctor.id}_${_dateKey(date)}_${_safeKey(time)}';
+    final slotId = appointmentSlotId(doctor.id, date, time);
     final slotReference =
         _firestore.collection('appointment_slots').doc(slotId);
     final timelineReference = _firestore.collection('timeline_events').doc();
@@ -1773,7 +1972,7 @@ class AppData extends ChangeNotifier {
       final appointmentData = appointmentSnapshot.data()!;
       final doctorId = (appointmentData['doctorId'] ?? '').toString();
       final oldSlotId = (appointmentData['slotId'] ?? '').toString();
-      final newSlotId = '${doctorId}_${_dateKey(date)}_${_safeKey(time)}';
+      final newSlotId = appointmentSlotId(doctorId, date, time);
       final newSlotReference =
           _firestore.collection('appointment_slots').doc(newSlotId);
       final newSlotSnapshot = await transaction.get(newSlotReference);
@@ -2065,6 +2264,101 @@ class AppData extends ChangeNotifier {
     }, SetOptions(merge: true));
   }
 
+  Future<void> saveWeeklySchedule(
+    String doctorId,
+    Map<int, DoctorDaySchedule> schedule,
+  ) async {
+    final serialized = <String, dynamic>{
+      for (final entry in schedule.entries)
+        entry.key.toString(): entry.value.toMap(),
+    };
+    await _firestore.collection('doctors').doc(doctorId).update({
+      'weeklySchedule': serialized,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  Future<void> saveScheduleException({
+    required String doctorId,
+    required DateTime date,
+    required bool unavailable,
+    required List<String> customTimes,
+    String note = '',
+  }) async {
+    final key = _dateKey(date);
+    await _firestore.collection('doctors').doc(doctorId).update({
+      'scheduleExceptions.$key': <String, dynamic>{
+        'unavailable': unavailable,
+        'customTimes': customTimes,
+        'note': note.trim(),
+      },
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  Future<void> removeScheduleException(
+    String doctorId,
+    DateTime date,
+  ) async {
+    await _firestore.collection('doctors').doc(doctorId).update({
+      'scheduleExceptions.${_dateKey(date)}': FieldValue.delete(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  Future<void> updateAccountProfile({
+    required String name,
+    required String phone,
+    String specialty = '',
+    String qualification = '',
+    int experienceYears = 0,
+    String hospitalName = '',
+    String bio = '',
+    int averageConsultationMinutes = 30,
+  }) async {
+    if (currentUserId.isEmpty) {
+      throw StateError('No signed-in user was found.');
+    }
+
+    final cleanedName = name.trim();
+    if (cleanedName.length < 2) {
+      throw StateError('Please enter a valid name.');
+    }
+
+    final batch = _firestore.batch();
+    batch.set(
+      _firestore.collection('users').doc(currentUserId),
+      <String, dynamic>{
+        'name': cleanedName,
+        'phone': phone.trim(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      },
+      SetOptions(merge: true),
+    );
+
+    if (currentUserRole == 'doctor') {
+      batch.set(
+        _firestore.collection('doctors').doc(currentUserId),
+        <String, dynamic>{
+          'name': cleanedName,
+          'phone': phone.trim(),
+          'specialty': specialty.trim(),
+          'designation': specialty.trim(),
+          'qualification': qualification.trim(),
+          'experienceYears': experienceYears,
+          'hospitalName': hospitalName.trim(),
+          'bio': bio.trim(),
+          'averageConsultationMinutes':
+              averageConsultationMinutes.clamp(10, 180),
+          'updatedAt': FieldValue.serverTimestamp(),
+        },
+        SetOptions(merge: true),
+      );
+    }
+
+    await batch.commit();
+  }
+
   Future<void> addAvailability(
     String doctorId,
     DateTime date,
@@ -2092,10 +2386,12 @@ class AppData extends ChangeNotifier {
     final batch = _firestore.batch();
     batch.update(_firestore.collection('doctors').doc(doctorId), {
       'approved': newValue,
+      'accountStatus': newValue ? 'approved' : 'pending',
       'updatedAt': FieldValue.serverTimestamp(),
     });
     batch.update(_firestore.collection('users').doc(doctorId), {
       'approved': newValue,
+      'accountStatus': newValue ? 'approved' : 'pending',
       'updatedAt': FieldValue.serverTimestamp(),
     });
     await batch.commit();
@@ -2104,12 +2400,51 @@ class AppData extends ChangeNotifier {
 
   Future<void> removeDoctor(String doctorId) async {
     final batch = _firestore.batch();
-    batch.delete(_firestore.collection('doctors').doc(doctorId));
-    batch.update(_firestore.collection('users').doc(doctorId), {
-      'isActive': false,
-      'approved': false,
-      'updatedAt': FieldValue.serverTimestamp(),
-    });
+    batch.set(
+      _firestore.collection('doctors').doc(doctorId),
+      {
+        'available': false,
+        'approved': false,
+        'accountStatus': 'disabled',
+        'updatedAt': FieldValue.serverTimestamp(),
+      },
+      SetOptions(merge: true),
+    );
+    batch.set(
+      _firestore.collection('users').doc(doctorId),
+      {
+        'isActive': false,
+        'approved': false,
+        'accountStatus': 'disabled',
+        'updatedAt': FieldValue.serverTimestamp(),
+      },
+      SetOptions(merge: true),
+    );
+    await batch.commit();
+  }
+
+  Future<void> restoreDoctor(String doctorId) async {
+    final batch = _firestore.batch();
+    batch.set(
+      _firestore.collection('doctors').doc(doctorId),
+      {
+        'available': true,
+        'approved': false,
+        'accountStatus': 'pending',
+        'updatedAt': FieldValue.serverTimestamp(),
+      },
+      SetOptions(merge: true),
+    );
+    batch.set(
+      _firestore.collection('users').doc(doctorId),
+      {
+        'isActive': true,
+        'approved': false,
+        'accountStatus': 'pending',
+        'updatedAt': FieldValue.serverTimestamp(),
+      },
+      SetOptions(merge: true),
+    );
     await batch.commit();
   }
 

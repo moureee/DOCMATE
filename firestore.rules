@@ -78,6 +78,8 @@ service cloud.firestore {
             'designation',
             'available',
             'availableSlots',
+            'weeklySchedule',
+            'scheduleExceptions',
             'profileImageUrl',
             'qualification',
             'experienceYears',
@@ -97,7 +99,7 @@ service cloud.firestore {
         (isDoctor() && request.auth.uid in resource.data.doctorIds)
       );
 
-      allow create: if isPatient() &&
+      allow create: if signedIn() &&
         request.auth.uid == patientId &&
         request.resource.data.uid == patientId;
 

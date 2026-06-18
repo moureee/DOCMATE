@@ -2,9 +2,19 @@ import 'package:flutter/material.dart';
 
 import 'package:docmate/core/theme/app_theme.dart';
 import 'package:docmate/data/app_data.dart';
+import 'package:docmate/features/patient/screens/book_appointment_screen.dart';
 
-class PatientAppointmentsScreen extends StatelessWidget {
+class PatientAppointmentsScreen extends StatefulWidget {
   const PatientAppointmentsScreen({super.key});
+
+  @override
+  State<PatientAppointmentsScreen> createState() =>
+      _PatientAppointmentsScreenState();
+}
+
+class _PatientAppointmentsScreenState extends State<PatientAppointmentsScreen> {
+  String sort = 'date_asc';
+  String statusFilter = 'All';
 
   @override
   Widget build(BuildContext context) {
@@ -13,42 +23,126 @@ class PatientAppointmentsScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text('My Appointments'),
+        actions: [
+          IconButton(
+            tooltip: 'Book appointment',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const BookAppointmentScreen(),
+                ),
+              );
+            },
+            icon: const Icon(Icons.add_circle_outline),
+          ),
+          PopupMenuButton<String>(
+            tooltip: 'Sort appointments',
+            initialValue: sort,
+            onSelected: (value) => setState(() => sort = value),
+            itemBuilder: (_) => const [
+              PopupMenuItem(
+                  value: 'date_asc', child: Text('Date: earliest first')),
+              PopupMenuItem(
+                  value: 'date_desc', child: Text('Date: latest first')),
+              PopupMenuItem(value: 'doctor', child: Text('Doctor name')),
+              PopupMenuItem(value: 'status', child: Text('Status')),
+            ],
+            icon: const Icon(Icons.sort),
+          ),
+        ],
       ),
       body: AnimatedBuilder(
         animation: appData,
         builder: (context, child) {
-          final appointments = appData.appointments.where((appointment) {
+          var appointments = appData.appointments.where((appointment) {
             return appointment.patientId == appData.currentUserId ||
                 appointment.patientName == appData.currentPatientName;
           }).toList();
 
-          appointments.sort(
-            (firstAppointment, secondAppointment) {
-              return firstAppointment.date.compareTo(
-                secondAppointment.date,
-              );
-            },
-          );
-
-          if (appointments.isEmpty) {
-            return const Center(
-              child: Text(
-                'You do not have any appointments.',
-              ),
-            );
+          if (statusFilter != 'All') {
+            appointments = appointments
+                .where((appointment) => appointment.status == statusFilter)
+                .toList();
           }
 
-          return ListView.builder(
-            padding: const EdgeInsets.all(18),
-            itemCount: appointments.length,
-            itemBuilder: (context, index) {
-              final appointment = appointments[index];
+          switch (sort) {
+            case 'date_desc':
+              appointments.sort((a, b) => b.date.compareTo(a.date));
+              break;
+            case 'doctor':
+              appointments.sort((a, b) => a.doctorName.compareTo(b.doctorName));
+              break;
+            case 'status':
+              appointments.sort((a, b) => a.status.compareTo(b.status));
+              break;
+            default:
+              appointments.sort((a, b) => a.date.compareTo(b.date));
+          }
 
-              return buildAppointmentCard(
-                context,
-                appointment,
-              );
-            },
+          return Column(
+            children: [
+              SizedBox(
+                height: 54,
+                child: ListView(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  scrollDirection: Axis.horizontal,
+                  children: [
+                    'All',
+                    'Pending',
+                    'Accepted',
+                    'Completed',
+                    'Cancelled',
+                    'Rejected'
+                  ]
+                      .map(
+                        (status) => Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: ChoiceChip(
+                            label: Text(status),
+                            selected: statusFilter == status,
+                            onSelected: (_) =>
+                                setState(() => statusFilter = status),
+                          ),
+                        ),
+                      )
+                      .toList(),
+                ),
+              ),
+              Expanded(
+                child: appointments.isEmpty
+                    ? Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Text(
+                                'You do not have appointments in this category.'),
+                            const SizedBox(height: 12),
+                            ElevatedButton.icon(
+                              onPressed: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) =>
+                                        const BookAppointmentScreen(),
+                                  ),
+                                );
+                              },
+                              icon: const Icon(Icons.calendar_month),
+                              label: const Text('Book Appointment'),
+                            ),
+                          ],
+                        ),
+                      )
+                    : ListView.builder(
+                        padding: const EdgeInsets.all(18),
+                        itemCount: appointments.length,
+                        itemBuilder: (context, index) =>
+                            buildAppointmentCard(context, appointments[index]),
+                      ),
+              ),
+            ],
           );
         },
       ),
@@ -303,6 +397,11 @@ class PatientAppointmentsScreen extends StatelessWidget {
       return;
     }
 
+    final selectedDoctorId = selectedDoctor?.id;
+    if (selectedDoctorId == null) {
+      return;
+    }
+
     final selectedTime = await showDialog<String>(
       context: context,
       builder: (dialogContext) {
@@ -311,13 +410,30 @@ class PatientAppointmentsScreen extends StatelessWidget {
             'Select Time • ${formatDate(selectedDate)}',
           ),
           children: availableTimes.map((time) {
+            final booked = AppData.instance.isSlotBooked(
+              selectedDoctorId,
+              selectedDate,
+              time,
+              excludingAppointmentId: appointment.id,
+            );
             return SimpleDialogOption(
-              onPressed: () {
-                Navigator.pop(dialogContext, time);
-              },
+              onPressed: booked
+                  ? null
+                  : () {
+                      Navigator.pop(dialogContext, time);
+                    },
               child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 6),
-                child: Text(time),
+                child: Row(
+                  children: [
+                    Expanded(child: Text(time)),
+                    if (booked)
+                      const Text(
+                        'Booked',
+                        style: TextStyle(color: Colors.red),
+                      ),
+                  ],
+                ),
               ),
             );
           }).toList(),

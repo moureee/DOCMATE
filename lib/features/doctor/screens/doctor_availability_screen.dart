@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:docmate/core/theme/app_theme.dart';
 import 'package:docmate/data/app_data.dart';
 
-class DoctorAvailabilityScreen extends StatelessWidget {
+class DoctorAvailabilityScreen extends StatefulWidget {
   const DoctorAvailabilityScreen({
     super.key,
     required this.doctor,
@@ -11,133 +11,189 @@ class DoctorAvailabilityScreen extends StatelessWidget {
 
   final DoctorModel doctor;
 
-  Future<void> showAddSlotDialog(BuildContext context) async {
+  @override
+  State<DoctorAvailabilityScreen> createState() =>
+      _DoctorAvailabilityScreenState();
+}
+
+class _DoctorAvailabilityScreenState extends State<DoctorAvailabilityScreen> {
+  late Map<int, DoctorDaySchedule> schedule;
+  bool saving = false;
+
+  static const dayNames = <int, String>{
+    DateTime.monday: 'Monday',
+    DateTime.tuesday: 'Tuesday',
+    DateTime.wednesday: 'Wednesday',
+    DateTime.thursday: 'Thursday',
+    DateTime.friday: 'Friday',
+    DateTime.saturday: 'Saturday',
+    DateTime.sunday: 'Sunday',
+  };
+
+  @override
+  void initState() {
+    super.initState();
+    schedule = <int, DoctorDaySchedule>{
+      for (var day = DateTime.monday; day <= DateTime.sunday; day++)
+        day: widget.doctor.weeklySchedule[day] ??
+            const DoctorDaySchedule(
+              enabled: false,
+              startTime: '09:00 AM',
+              endTime: '05:00 PM',
+              slotMinutes: 30,
+            ),
+    };
+  }
+
+  Future<void> pickTime(int weekday, bool isStart) async {
+    final current = schedule[weekday]!;
+    final initial = _parseTime(isStart ? current.startTime : current.endTime);
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: initial,
+    );
+    if (picked == null || !mounted) return;
+
+    setState(() {
+      schedule[weekday] = DoctorDaySchedule(
+        enabled: current.enabled,
+        startTime: isStart ? picked.format(context) : current.startTime,
+        endTime: isStart ? current.endTime : picked.format(context),
+        slotMinutes: current.slotMinutes,
+      );
+    });
+  }
+
+  TimeOfDay _parseTime(String value) {
+    final match = RegExp(
+      r'^(\d{1,2}):(\d{2})\s*(AM|PM)$',
+      caseSensitive: false,
+    ).firstMatch(value.trim());
+    if (match == null) return const TimeOfDay(hour: 9, minute: 0);
+    var hour = int.tryParse(match.group(1) ?? '') ?? 9;
+    final minute = int.tryParse(match.group(2) ?? '') ?? 0;
+    final period = (match.group(3) ?? 'AM').toUpperCase();
+    if (period == 'PM' && hour != 12) hour += 12;
+    if (period == 'AM' && hour == 12) hour = 0;
+    return TimeOfDay(hour: hour, minute: minute);
+  }
+
+  Future<void> saveSchedule() async {
+    setState(() => saving = true);
+    try {
+      await AppData.instance.saveWeeklySchedule(widget.doctor.id, schedule);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Weekly schedule saved.')),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not save the weekly schedule.')),
+      );
+    } finally {
+      if (mounted) setState(() => saving = false);
+    }
+  }
+
+  Future<void> addException() async {
     var selectedDate = DateTime.now().add(const Duration(days: 1));
-    TimeOfDay? selectedTime;
+    var unavailable = true;
+    final timesController = TextEditingController();
+    final noteController = TextEditingController();
 
     await showDialog<void>(
       context: context,
       builder: (dialogContext) {
-        var isSaving = false;
-
         return StatefulBuilder(
           builder: (context, setDialogState) {
-            String timeLabel() {
-              if (selectedTime == null) return 'Select time';
-              return selectedTime!.format(context);
-            }
-
             return AlertDialog(
-              title: const Text('Add Dated Time Slot'),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: const Icon(Icons.calendar_month),
-                    title: const Text('Appointment date'),
-                    subtitle: Text(formatDate(selectedDate)),
-                    trailing: const Icon(Icons.edit_calendar),
-                    onTap: isSaving
-                        ? null
-                        : () async {
-                            final picked = await showDatePicker(
-                              context: dialogContext,
-                              initialDate: selectedDate,
-                              firstDate: DateTime.now(),
-                              lastDate: DateTime.now().add(
-                                const Duration(days: 180),
-                              ),
-                            );
-                            if (picked != null) {
-                              setDialogState(() {
-                                selectedDate = picked;
-                              });
-                            }
-                          },
-                  ),
-                  const SizedBox(height: 8),
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: const Icon(Icons.schedule),
-                    title: const Text('Appointment time'),
-                    subtitle: Text(timeLabel()),
-                    trailing: const Icon(Icons.access_time),
-                    onTap: isSaving
-                        ? null
-                        : () async {
-                            final picked = await showTimePicker(
-                              context: dialogContext,
-                              initialTime: selectedTime ?? TimeOfDay.now(),
-                            );
-                            if (picked != null) {
-                              setDialogState(() {
-                                selectedTime = picked;
-                              });
-                            }
-                          },
-                  ),
-                  const SizedBox(height: 10),
-                  const Text(
-                    'This slot will be available only on the selected date.',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.black54,
+              title: const Text('Schedule Exception'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.event),
+                      title: Text(formatDate(selectedDate)),
+                      subtitle: const Text('Tap to choose date'),
+                      onTap: () async {
+                        final picked = await showDatePicker(
+                          context: dialogContext,
+                          initialDate: selectedDate,
+                          firstDate: DateTime.now(),
+                          lastDate: DateTime.now().add(
+                            const Duration(days: 365),
+                          ),
+                        );
+                        if (picked != null) {
+                          setDialogState(() => selectedDate = picked);
+                        }
+                      },
                     ),
-                  ),
-                ],
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Unavailable all day'),
+                      subtitle: const Text(
+                        'Use this for leave, vacation or a closed clinic.',
+                      ),
+                      value: unavailable,
+                      onChanged: (value) {
+                        setDialogState(() => unavailable = value);
+                      },
+                    ),
+                    if (!unavailable)
+                      TextField(
+                        controller: timesController,
+                        decoration: const InputDecoration(
+                          labelText: 'Custom times',
+                          hintText: '09:00 AM, 09:30 AM, 10:00 AM',
+                          helperText:
+                              'Separate each appointment time by comma.',
+                        ),
+                        maxLines: 2,
+                      ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: noteController,
+                      decoration: const InputDecoration(
+                        labelText: 'Reason or note (optional)',
+                      ),
+                    ),
+                  ],
+                ),
               ),
               actions: [
                 TextButton(
-                  onPressed: isSaving
-                      ? null
-                      : () {
-                          Navigator.pop(dialogContext);
-                        },
+                  onPressed: () => Navigator.pop(dialogContext),
                   child: const Text('Cancel'),
                 ),
                 ElevatedButton(
-                  onPressed: isSaving
-                      ? null
-                      : () async {
-                          if (selectedTime == null) {
-                            ScaffoldMessenger.of(dialogContext).showSnackBar(
-                              const SnackBar(
-                                content: Text('Please select a time.'),
-                              ),
-                            );
-                            return;
-                          }
-
-                          setDialogState(() {
-                            isSaving = true;
-                          });
-
-                          try {
-                            await AppData.instance.addAvailability(
-                              doctor.id,
-                              selectedDate,
-                              selectedTime!.format(context),
-                            );
-
-                            if (dialogContext.mounted) {
-                              Navigator.pop(dialogContext);
-                            }
-                          } catch (_) {
-                            if (!dialogContext.mounted) return;
-                            setDialogState(() {
-                              isSaving = false;
-                            });
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                  'Could not add the slot. Please try again.',
-                                ),
-                              ),
-                            );
-                          }
-                        },
-                  child: Text(isSaving ? 'Saving...' : 'Add Slot'),
+                  onPressed: () async {
+                    final customTimes = timesController.text
+                        .split(',')
+                        .map((item) => item.trim())
+                        .where((item) => item.isNotEmpty)
+                        .toList();
+                    if (!unavailable && customTimes.isEmpty) {
+                      ScaffoldMessenger.of(dialogContext).showSnackBar(
+                        const SnackBar(
+                          content: Text('Enter at least one custom time.'),
+                        ),
+                      );
+                      return;
+                    }
+                    await AppData.instance.saveScheduleException(
+                      doctorId: widget.doctor.id,
+                      date: selectedDate,
+                      unavailable: unavailable,
+                      customTimes: customTimes,
+                      note: noteController.text,
+                    );
+                    if (dialogContext.mounted) Navigator.pop(dialogContext);
+                  },
+                  child: const Text('Save'),
                 ),
               ],
             );
@@ -145,114 +201,215 @@ class DoctorAvailabilityScreen extends StatelessWidget {
         );
       },
     );
+
+    timesController.dispose();
+    noteController.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final appData = AppData.instance;
-
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Availability by Date'),
-      ),
+      appBar: AppBar(title: const Text('Weekly Availability')),
       floatingActionButton: FloatingActionButton.extended(
-        backgroundColor: AppColors.primary,
-        foregroundColor: AppColors.dark,
-        onPressed: () {
-          showAddSlotDialog(context);
-        },
-        icon: const Icon(Icons.add),
-        label: const Text('Add Slot'),
+        onPressed: addException,
+        icon: const Icon(Icons.event_busy),
+        label: const Text('Add Exception'),
       ),
       body: AnimatedBuilder(
-        animation: appData,
+        animation: AppData.instance,
         builder: (context, child) {
-          if (doctor.availableSlots.isEmpty) {
-            return const Center(
-              child: Padding(
-                padding: EdgeInsets.all(24),
-                child: Text(
-                  'No availability added. Add a date and time for patients to book.',
-                  textAlign: TextAlign.center,
+          final liveDoctor = AppData.instance.doctors.firstWhere(
+            (item) => item.id == widget.doctor.id,
+            orElse: () => widget.doctor,
+          );
+          return ListView(
+            padding: const EdgeInsets.fromLTRB(18, 18, 18, 100),
+            children: [
+              Container(
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  color: AppColors.primary,
+                  borderRadius: BorderRadius.circular(22),
+                ),
+                child: const Text(
+                  'Set your normal weekly working hours once. Patients will '
+                  'receive appointment slots automatically. Add an exception '
+                  'only when you are unavailable or working different hours.',
+                  style: TextStyle(fontWeight: FontWeight.w600),
                 ),
               ),
-            );
-          }
-
-          final slots = List<String>.from(doctor.availableSlots)
-            ..sort((first, second) {
-              final firstDate = availabilitySlotDate(first);
-              final secondDate = availabilitySlotDate(second);
-              if (firstDate == null && secondDate == null) {
-                return first.compareTo(second);
-              }
-              if (firstDate == null) return 1;
-              if (secondDate == null) return -1;
-              final dateComparison = firstDate.compareTo(secondDate);
-              if (dateComparison != 0) return dateComparison;
-              return availabilitySlotTime(first).compareTo(
-                availabilitySlotTime(second),
-              );
-            });
-
-          return ListView.builder(
-            padding: const EdgeInsets.fromLTRB(18, 18, 18, 90),
-            itemCount: slots.length,
-            itemBuilder: (context, index) {
-              final slot = slots[index];
-              final date = availabilitySlotDate(slot);
-              final time = availabilitySlotTime(slot);
-
-              return Container(
-                margin: const EdgeInsets.only(bottom: 11),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(18),
-                  border: Border.all(color: Colors.grey.shade300),
+              const SizedBox(height: 18),
+              ...dayNames.entries
+                  .map((entry) => _dayCard(entry.key, entry.value)),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: saving ? null : saveSchedule,
+                  icon: saving
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.save),
+                  label: Text(saving ? 'Saving...' : 'Save Weekly Schedule'),
                 ),
-                child: ListTile(
-                  leading: const CircleAvatar(
-                    backgroundColor: AppColors.lightMint,
-                    child: Icon(
-                      Icons.event_available,
-                      color: AppColors.primaryDark,
+              ),
+              const SizedBox(height: 26),
+              const Text(
+                'Schedule Exceptions',
+                style: TextStyle(fontSize: 19, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 10),
+              if (liveDoctor.scheduleExceptions.isEmpty)
+                const Text(
+                  'No exceptions added. Your normal weekly schedule applies.',
+                  style: TextStyle(color: Colors.black54),
+                )
+              else
+                ...liveDoctor.scheduleExceptions.entries.map((entry) {
+                  final value = entry.value;
+                  final key = entry.key;
+                  final date = key.length == 8
+                      ? DateTime.tryParse(
+                          '${key.substring(0, 4)}-${key.substring(4, 6)}-${key.substring(6, 8)}',
+                        )
+                      : null;
+                  return Card(
+                    child: ListTile(
+                      leading: Icon(
+                        value.unavailable
+                            ? Icons.event_busy
+                            : Icons.edit_calendar,
+                        color: value.unavailable
+                            ? AppColors.danger
+                            : AppColors.primaryDark,
+                      ),
+                      title: Text(date == null ? key : formatDate(date)),
+                      subtitle: Text(
+                        value.unavailable
+                            ? 'Unavailable all day${value.note.isEmpty ? '' : ' • ${value.note}'}'
+                            : 'Custom times: ${value.customTimes.join(', ')}',
+                      ),
+                      trailing: IconButton(
+                        tooltip: 'Remove exception',
+                        onPressed: date == null
+                            ? null
+                            : () => AppData.instance.removeScheduleException(
+                                  widget.doctor.id,
+                                  date,
+                                ),
+                        icon: const Icon(Icons.delete_outline),
+                      ),
+                    ),
+                  );
+                }),
+              if (liveDoctor.availableSlots.isNotEmpty) ...[
+                const SizedBox(height: 24),
+                const Text(
+                  'Legacy One-off Slots',
+                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                ...liveDoctor.availableSlots.map(
+                  (slot) => Card(
+                    child: ListTile(
+                      title: Text(availabilitySlotLabel(slot)),
+                      trailing: IconButton(
+                        onPressed: () => AppData.instance.removeAvailability(
+                          widget.doctor.id,
+                          slot,
+                        ),
+                        icon: const Icon(Icons.delete_outline),
+                      ),
                     ),
                   ),
-                  title: Text(
-                    time,
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  subtitle: Text(
-                    date == null
-                        ? 'Legacy recurring slot • available every day'
-                        : '${formatDate(date)} • Available for booking',
-                  ),
-                  trailing: IconButton(
-                    tooltip: 'Remove slot',
-                    onPressed: () async {
-                      try {
-                        await appData.removeAvailability(doctor.id, slot);
-                      } catch (_) {
-                        if (!context.mounted) return;
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text(
-                              'Could not remove the slot. Please try again.',
-                            ),
-                          ),
-                        );
-                      }
-                    },
-                    icon: const Icon(
-                      Icons.delete_outline,
-                      color: AppColors.danger,
-                    ),
-                  ),
                 ),
-              );
-            },
+              ],
+            ],
           );
         },
+      ),
+    );
+  }
+
+  Widget _dayCard(int weekday, String name) {
+    final current = schedule[weekday]!;
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          children: [
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: Text(
+                name,
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+              subtitle: Text(
+                current.enabled
+                    ? '${current.startTime}–${current.endTime} • every ${current.slotMinutes} min'
+                    : 'Not available',
+              ),
+              value: current.enabled,
+              onChanged: (value) {
+                setState(() {
+                  schedule[weekday] = DoctorDaySchedule(
+                    enabled: value,
+                    startTime: current.startTime,
+                    endTime: current.endTime,
+                    slotMinutes: current.slotMinutes,
+                  );
+                });
+              },
+            ),
+            if (current.enabled)
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () => pickTime(weekday, true),
+                      icon: const Icon(Icons.login),
+                      label: Text(current.startTime),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () => pickTime(weekday, false),
+                      icon: const Icon(Icons.logout),
+                      label: Text(current.endTime),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  DropdownButton<int>(
+                    value: current.slotMinutes,
+                    items: const [15, 20, 30, 45, 60]
+                        .map(
+                          (minutes) => DropdownMenuItem<int>(
+                            value: minutes,
+                            child: Text('$minutes m'),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (value) {
+                      if (value == null) return;
+                      setState(() {
+                        schedule[weekday] = DoctorDaySchedule(
+                          enabled: current.enabled,
+                          startTime: current.startTime,
+                          endTime: current.endTime,
+                          slotMinutes: value,
+                        );
+                      });
+                    },
+                  ),
+                ],
+              ),
+          ],
+        ),
       ),
     );
   }
