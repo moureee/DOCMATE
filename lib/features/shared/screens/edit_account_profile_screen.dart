@@ -107,109 +107,149 @@ class _EditAccountProfileScreenState extends State<EditAccountProfileScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-          title: Text(isDoctor ? 'Edit Doctor Profile' : 'Admin Profile')),
+        title: Text(isDoctor ? 'Edit Doctor Profile' : 'Admin Profile'),
+      ),
       body: loading
           ? const Center(child: CircularProgressIndicator())
-          : ListView(
-              padding: const EdgeInsets.all(18),
-              children: [
-                const CircleAvatar(
-                  radius: 44,
-                  backgroundColor: AppColors.primary,
-                  child: Icon(Icons.person, size: 48, color: AppColors.dark),
+          : Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 720),
+                child: ListView(
+                  padding: const EdgeInsets.all(18),
+                  children: [
+                    const CircleAvatar(
+                      radius: 44,
+                      backgroundColor: AppColors.primary,
+                      child: Icon(
+                        Icons.person,
+                        size: 48,
+                        color: AppColors.dark,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppColors.lightMint,
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: Text(
+                        isDoctor
+                            ? 'Update your professional information. Approval status, rating and account role are protected.'
+                            : 'Update the administrator contact information. Account role and UID are protected.',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: nameController,
+                      textCapitalization: TextCapitalization.words,
+                      decoration: const InputDecoration(
+                        labelText: 'Full name',
+                        prefixIcon: Icon(Icons.person_outline),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: phoneController,
+                      keyboardType: TextInputType.phone,
+                      decoration: const InputDecoration(
+                        labelText: 'Phone number',
+                        prefixIcon: Icon(Icons.phone_outlined),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      enabled: false,
+                      initialValue:
+                          FirebaseAuth.instance.currentUser?.email ?? '',
+                      decoration: const InputDecoration(
+                        labelText: 'Email (cannot be changed here)',
+                        prefixIcon: Icon(Icons.email_outlined),
+                      ),
+                    ),
+                    if (isDoctor) ...[
+                      const SizedBox(height: 20),
+                      const Text(
+                        'Professional details',
+                        style: TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: specialtyController,
+                        textCapitalization: TextCapitalization.words,
+                        decoration: const InputDecoration(
+                          labelText: 'Specialty / designation',
+                          prefixIcon: Icon(Icons.medical_services_outlined),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: qualificationController,
+                        textCapitalization: TextCapitalization.words,
+                        decoration: const InputDecoration(
+                          labelText: 'Qualifications',
+                          prefixIcon: Icon(Icons.school_outlined),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: experienceController,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          labelText: 'Experience (years)',
+                          prefixIcon: Icon(Icons.workspace_premium_outlined),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: hospitalController,
+                        textCapitalization: TextCapitalization.words,
+                        decoration: const InputDecoration(
+                          labelText: 'Hospital / clinic',
+                          prefixIcon: Icon(Icons.local_hospital_outlined),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: consultationController,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          labelText: 'Average consultation time (minutes)',
+                          prefixIcon: Icon(Icons.timer_outlined),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: bioController,
+                        maxLines: 4,
+                        textCapitalization: TextCapitalization.sentences,
+                        decoration: const InputDecoration(
+                          labelText: 'Professional biography',
+                          alignLabelWithHint: true,
+                          prefixIcon: Icon(Icons.notes_outlined),
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 24),
+                    ElevatedButton.icon(
+                      onPressed: saving ? null : save,
+                      icon: saving
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.save),
+                      label: Text(saving ? 'Saving...' : 'Save Profile'),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 20),
-                TextField(
-                  controller: nameController,
-                  decoration: const InputDecoration(
-                    labelText: 'Full name',
-                    prefixIcon: Icon(Icons.person_outline),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: phoneController,
-                  keyboardType: TextInputType.phone,
-                  decoration: const InputDecoration(
-                    labelText: 'Phone number',
-                    prefixIcon: Icon(Icons.phone_outlined),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  enabled: false,
-                  initialValue: FirebaseAuth.instance.currentUser?.email ?? '',
-                  decoration: const InputDecoration(
-                    labelText: 'Email (cannot be changed here)',
-                    prefixIcon: Icon(Icons.email_outlined),
-                  ),
-                ),
-                if (isDoctor) ...[
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: specialtyController,
-                    decoration: const InputDecoration(
-                      labelText: 'Specialty / designation',
-                      prefixIcon: Icon(Icons.medical_services_outlined),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: qualificationController,
-                    decoration: const InputDecoration(
-                      labelText: 'Qualifications',
-                      prefixIcon: Icon(Icons.school_outlined),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: experienceController,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      labelText: 'Experience (years)',
-                      prefixIcon: Icon(Icons.workspace_premium_outlined),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: hospitalController,
-                    decoration: const InputDecoration(
-                      labelText: 'Hospital / clinic',
-                      prefixIcon: Icon(Icons.local_hospital_outlined),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: consultationController,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      labelText: 'Average consultation time (minutes)',
-                      prefixIcon: Icon(Icons.timer_outlined),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: bioController,
-                    maxLines: 4,
-                    decoration: const InputDecoration(
-                      labelText: 'Professional biography',
-                      prefixIcon: Icon(Icons.notes_outlined),
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 24),
-                ElevatedButton.icon(
-                  onPressed: saving ? null : save,
-                  icon: saving
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.save),
-                  label: Text(saving ? 'Saving...' : 'Save Profile'),
-                ),
-              ],
+              ),
             ),
     );
   }

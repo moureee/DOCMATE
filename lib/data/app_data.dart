@@ -1852,7 +1852,10 @@ class AppData extends ChangeNotifier {
     final slotReference =
         _firestore.collection('appointment_slots').doc(slotId);
     final timelineReference = _firestore.collection('timeline_events').doc();
-    final notificationReference = _firestore.collection('notifications').doc();
+    final patientNotificationReference =
+        _firestore.collection('notifications').doc();
+    final doctorNotificationReference =
+        _firestore.collection('notifications').doc();
     final profileReference =
         _firestore.collection('health_profiles').doc(currentUserId);
     final scheduledAt = _combineDateAndTime(date, time);
@@ -1912,10 +1915,18 @@ class AppData extends ChangeNotifier {
         'createdAt': FieldValue.serverTimestamp(),
       });
 
-      transaction.set(notificationReference, {
+      transaction.set(patientNotificationReference, {
         'userId': currentUserId,
         'title': 'Booking Successful',
         'message': 'Your appointment with ${doctor.name} was booked.',
+        'read': false,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+
+      transaction.set(doctorNotificationReference, {
+        'userId': doctor.id,
+        'title': 'New Appointment Request',
+        'message': '$currentPatientName booked $time on ${formatDate(date)}.',
         'read': false,
         'createdAt': FieldValue.serverTimestamp(),
       });
@@ -1949,11 +1960,31 @@ class AppData extends ChangeNotifier {
       }
     });
 
-    await _createNotification(
-      userId: currentUserId,
-      title: 'Appointment Cancelled',
-      message: 'Your appointment was cancelled.',
-    );
+    final cancelledSnapshot = await appointmentReference.get();
+    final data = cancelledSnapshot.data() ?? <String, dynamic>{};
+    final patientId = (data['patientId'] ?? '').toString();
+    final doctorId = (data['doctorId'] ?? '').toString();
+    final patientName = (data['patientName'] ?? 'The patient').toString();
+    final doctorName = (data['doctorName'] ?? 'your doctor').toString();
+
+    if (currentUserRole == 'patient') {
+      await _createNotification(
+        userId: currentUserId,
+        title: 'Appointment Cancelled',
+        message: 'Your appointment with $doctorName was cancelled.',
+      );
+      await _createNotification(
+        userId: doctorId,
+        title: 'Appointment Cancelled',
+        message: '$patientName cancelled an appointment.',
+      );
+    } else if (currentUserRole == 'doctor') {
+      await _createNotification(
+        userId: patientId,
+        title: 'Appointment Cancelled',
+        message: 'Dr. $doctorName cancelled your appointment.',
+      );
+    }
   }
 
   Future<void> rescheduleAppointment({
@@ -2016,10 +2047,24 @@ class AppData extends ChangeNotifier {
       });
     });
 
+    final rescheduledSnapshot = await appointmentReference.get();
+    final rescheduledData = rescheduledSnapshot.data() ?? <String, dynamic>{};
+    final doctorId = (rescheduledData['doctorId'] ?? '').toString();
+    final doctorName =
+        (rescheduledData['doctorName'] ?? 'your doctor').toString();
+
     await _createNotification(
       userId: currentUserId,
       title: 'Appointment Rescheduled',
-      message: 'Your appointment was moved to ${formatDate(date)} at $time.',
+      message:
+          'Your appointment with $doctorName was moved to ${formatDate(date)} at $time.',
+    );
+
+    await _createNotification(
+      userId: doctorId,
+      title: 'Appointment Rescheduled',
+      message:
+          '$currentPatientName moved an appointment to ${formatDate(date)} at $time.',
     );
   }
 
@@ -2571,6 +2616,11 @@ class AppData extends ChangeNotifier {
       title: 'Emergency Request Sent',
       message: 'Your emergency request was recorded.',
     );
+
+    await _createAdminNotifications(
+      title: 'New Emergency Request',
+      message: '$currentDisplayName sent an emergency request.',
+    );
   }
 
   Future<void> markNotificationRead(NotificationModel notification) async {
@@ -2603,6 +2653,28 @@ class AppData extends ChangeNotifier {
       'read': false,
       'createdAt': FieldValue.serverTimestamp(),
     });
+  }
+
+  Future<void> _createAdminNotifications({
+    required String title,
+    required String message,
+  }) async {
+    final adminSnapshot = await _firestore
+        .collection('users')
+        .where('role', isEqualTo: 'admin')
+        .get();
+
+    final batch = _firestore.batch();
+    for (final document in adminSnapshot.docs) {
+      batch.set(_firestore.collection('notifications').doc(), {
+        'userId': document.id,
+        'title': title,
+        'message': message,
+        'read': false,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+    }
+    await batch.commit();
   }
 
   HealthProfileModel? healthProfileForPatient(String patientName) {

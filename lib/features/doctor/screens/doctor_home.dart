@@ -10,6 +10,8 @@ import 'package:docmate/features/doctor/screens/prescription_management_screen.d
 import 'package:docmate/features/shared/screens/chat_screen.dart';
 import 'package:docmate/features/shared/screens/overall_analytics_screen.dart';
 import 'package:docmate/features/shared/screens/edit_account_profile_screen.dart';
+import 'package:docmate/features/shared/screens/notifications_screen.dart';
+import 'package:docmate/features/shared/screens/settings_screen.dart';
 
 class DoctorHome extends StatelessWidget {
   const DoctorHome({super.key});
@@ -117,7 +119,7 @@ class DoctorHome extends StatelessWidget {
               child: ListView(
                 padding: const EdgeInsets.all(18),
                 children: [
-                  buildHeader(doctor),
+                  buildHeader(context, doctor),
                   const SizedBox(height: 22),
                   buildStatistics(
                     todayPatients: todayPatientCount,
@@ -159,7 +161,7 @@ class DoctorHome extends StatelessWidget {
     );
   }
 
-  Widget buildHeader(DoctorModel doctor) {
+  Widget buildHeader(BuildContext context, DoctorModel doctor) {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -190,13 +192,19 @@ class DoctorHome extends StatelessWidget {
                 ),
                 Text(
                   doctor.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     fontSize: 21,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
                 const SizedBox(height: 3),
-                Text(doctor.specialty),
+                Text(
+                  doctor.specialty,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
                 const SizedBox(height: 4),
                 Text(
                   '⭐ ${doctor.rating} • '
@@ -205,8 +213,94 @@ class DoctorHome extends StatelessWidget {
               ],
             ),
           ),
+          const SizedBox(width: 8),
+          Wrap(
+            spacing: 6,
+            children: [
+              buildHeaderAction(
+                context: context,
+                tooltip: 'Notifications',
+                label: 'Alerts',
+                icon: Icons.notifications_none,
+                screen: const NotificationsScreen(),
+                badgeCount: AppData.instance.notifications
+                    .where((notification) => !notification.read)
+                    .length,
+              ),
+              buildHeaderAction(
+                context: context,
+                tooltip: 'Settings',
+                label: 'Settings',
+                icon: Icons.settings_outlined,
+                screen: const SettingsScreen(),
+              ),
+              buildHeaderAction(
+                context: context,
+                tooltip: 'Edit doctor profile',
+                label: 'Profile',
+                icon: Icons.manage_accounts_outlined,
+                screen: const EditAccountProfileScreen(),
+              ),
+            ],
+          ),
         ],
       ),
+    );
+  }
+
+  Widget buildHeaderAction({
+    required BuildContext context,
+    required String tooltip,
+    required String label,
+    required IconData icon,
+    required Widget screen,
+    int badgeCount = 0,
+  }) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Stack(
+          clipBehavior: Clip.none,
+          children: [
+            IconButton.filledTonal(
+              tooltip: tooltip,
+              onPressed: () {
+                openScreen(context, screen);
+              },
+              icon: Icon(icon),
+            ),
+            if (badgeCount > 0)
+              Positioned(
+                right: 2,
+                top: 2,
+                child: Container(
+                  width: 18,
+                  height: 18,
+                  alignment: Alignment.center,
+                  decoration: const BoxDecoration(
+                    color: AppColors.danger,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Text(
+                    badgeCount > 9 ? '9+' : badgeCount.toString(),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 9,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
     );
   }
 
@@ -215,32 +309,50 @@ class DoctorHome extends StatelessWidget {
     required int pendingAppointments,
     required int completedAppointments,
   }) {
-    return Row(
-      children: [
-        Expanded(
-          child: buildStatCard(
-            title: "Today's Patients",
-            value: todayPatients.toString(),
-            icon: Icons.people,
-          ),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: buildStatCard(
-            title: "Today's Pending",
-            value: pendingAppointments.toString(),
-            icon: Icons.pending_actions,
-          ),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: buildStatCard(
-            title: "Today's Completed",
-            value: completedAppointments.toString(),
-            icon: Icons.task_alt,
-          ),
-        ),
-      ],
+    final items = [
+      (
+        title: "Today's Patients",
+        value: todayPatients.toString(),
+        icon: Icons.people,
+      ),
+      (
+        title: "Today's Pending",
+        value: pendingAppointments.toString(),
+        icon: Icons.pending_actions,
+      ),
+      (
+        title: "Today's Completed",
+        value: completedAppointments.toString(),
+        icon: Icons.task_alt,
+      ),
+    ];
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final columns = constraints.maxWidth >= 900
+            ? 3
+            : constraints.maxWidth >= 350
+                ? 2
+                : 1;
+        const spacing = 10.0;
+        final cardWidth =
+            (constraints.maxWidth - spacing * (columns - 1)) / columns;
+
+        return Wrap(
+          spacing: spacing,
+          runSpacing: spacing,
+          children: items.map((item) {
+            return SizedBox(
+              width: cardWidth,
+              child: buildStatCard(
+                title: item.title,
+                value: item.value,
+                icon: item.icon,
+              ),
+            );
+          }).toList(),
+        );
+      },
     );
   }
 
@@ -292,72 +404,79 @@ class DoctorHome extends StatelessWidget {
     BuildContext context,
     DoctorModel doctor,
   ) {
-    return GridView.count(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      crossAxisCount: 2,
-      crossAxisSpacing: 12,
-      mainAxisSpacing: 12,
-      childAspectRatio: 1.25,
-      children: [
-        buildServiceCard(
-          context: context,
-          title: 'Appointments',
-          icon: Icons.calendar_month,
-          screen: const DoctorAppointmentsScreen(),
-        ),
-        buildServiceCard(
-          context: context,
-          title: 'Time Slots',
-          icon: Icons.schedule,
-          screen: DoctorAvailabilityScreen(
-            doctor: doctor,
+    final services = <Widget>[
+      buildServiceCard(
+        context: context,
+        title: 'Appointments',
+        icon: Icons.calendar_month,
+        screen: const DoctorAppointmentsScreen(),
+      ),
+      buildServiceCard(
+        context: context,
+        title: 'Weekly Availability',
+        icon: Icons.schedule,
+        screen: DoctorAvailabilityScreen(doctor: doctor),
+      ),
+      buildServiceCard(
+        context: context,
+        title: 'Prescriptions',
+        icon: Icons.receipt_long,
+        screen: PrescriptionManagementScreen(doctorName: doctor.name),
+      ),
+      buildServiceCard(
+        context: context,
+        title: 'Patient Information',
+        icon: Icons.folder_shared_outlined,
+        screen: DoctorPatientInfoScreen(doctor: doctor),
+      ),
+      buildServiceCard(
+        context: context,
+        title: 'Patient Chat',
+        icon: Icons.chat_bubble_outline,
+        screen: const ChatScreen(),
+      ),
+      buildServiceCard(
+        context: context,
+        title: 'Today Insights',
+        icon: Icons.analytics_outlined,
+        screen: DoctorInsightsScreen(doctor: doctor),
+      ),
+      buildServiceCard(
+        context: context,
+        title: 'Overall Analytics',
+        icon: Icons.query_stats,
+        screen: const OverallAnalyticsScreen(),
+      ),
+      buildServiceCard(
+        context: context,
+        title: 'Edit Profile',
+        icon: Icons.manage_accounts_outlined,
+        screen: const EditAccountProfileScreen(),
+      ),
+      buildAverageTimeCard(doctor),
+    ];
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final columns = constraints.maxWidth >= 1050
+            ? 4
+            : constraints.maxWidth >= 700
+                ? 3
+                : 2;
+
+        return GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: services.length,
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: columns,
+            crossAxisSpacing: 12,
+            mainAxisSpacing: 12,
+            mainAxisExtent: 145,
           ),
-        ),
-        buildServiceCard(
-          context: context,
-          title: 'Prescriptions',
-          icon: Icons.receipt_long,
-          screen: PrescriptionManagementScreen(
-            doctorName: doctor.name,
-          ),
-        ),
-        buildServiceCard(
-          context: context,
-          title: 'Patient Information',
-          icon: Icons.folder_shared_outlined,
-          screen: DoctorPatientInfoScreen(
-            doctor: doctor,
-          ),
-        ),
-        buildServiceCard(
-          context: context,
-          title: 'Patient Chat',
-          icon: Icons.chat_bubble_outline,
-          screen: const ChatScreen(),
-        ),
-        buildServiceCard(
-          context: context,
-          title: 'Today Insights',
-          icon: Icons.analytics_outlined,
-          screen: DoctorInsightsScreen(
-            doctor: doctor,
-          ),
-        ),
-        buildServiceCard(
-          context: context,
-          title: 'Overall Analytics',
-          icon: Icons.query_stats,
-          screen: const OverallAnalyticsScreen(),
-        ),
-        buildServiceCard(
-          context: context,
-          title: 'Edit Profile',
-          icon: Icons.manage_accounts_outlined,
-          screen: const EditAccountProfileScreen(),
-        ),
-        buildAverageTimeCard(doctor),
-      ],
+          itemBuilder: (context, index) => services[index],
+        );
+      },
     );
   }
 

@@ -136,6 +136,24 @@ Future<void> createUserRecords({
   }
 
   await batch.commit();
+
+  if (role == 'doctor') {
+    final adminSnapshot = await firestore
+        .collection('users')
+        .where('role', isEqualTo: 'admin')
+        .get();
+    final notificationBatch = firestore.batch();
+    for (final document in adminSnapshot.docs) {
+      notificationBatch.set(firestore.collection('notifications').doc(), {
+        'userId': document.id,
+        'title': 'New Doctor Request',
+        'message': '$fullName requested approval as $specialty.',
+        'read': false,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+    }
+    await notificationBatch.commit();
+  }
 }
 
 class AuthLoginScreen extends StatefulWidget {
@@ -791,6 +809,21 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
     super.dispose();
   }
 
+  String phoneAuthMessage(FirebaseAuthException error) {
+    switch (error.code) {
+      case 'operation-not-allowed':
+        return 'Phone sign-in is disabled. In Firebase Console, open Authentication > Sign-in method > Phone and enable it.';
+      case 'app-not-authorized':
+        return 'This Android build is not authorized for Firebase phone login. Add the debug SHA-1 and SHA-256 fingerprints in Firebase Project settings, then replace google-services.json.';
+      case 'invalid-app-credential':
+        return 'Firebase could not verify this app. Check the Android SHA fingerprints and the latest google-services.json file.';
+      case 'missing-client-identifier':
+        return 'Firebase phone verification is not configured for this app build.';
+      default:
+        return friendlyAuthMessage(error);
+    }
+  }
+
   Future<void> sendOtp() async {
     final phone = AuthValidators.normalizePhone(phoneController.text);
 
@@ -829,7 +862,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
             }
           },
           verificationFailed: (FirebaseAuthException e) {
-            showMessage(friendlyAuthMessage(e));
+            showMessage(phoneAuthMessage(e));
           },
           codeSent: (String id, int? resendToken) {
             setState(() {
@@ -845,7 +878,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
         );
       }
     } on FirebaseAuthException catch (e) {
-      showMessage(friendlyAuthMessage(e));
+      showMessage(phoneAuthMessage(e));
     } catch (e) {
       showMessage('Failed to send OTP');
     } finally {
@@ -892,7 +925,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
 
       await completePhoneAuth(user);
     } on FirebaseAuthException catch (e) {
-      showMessage(friendlyAuthMessage(e));
+      showMessage(phoneAuthMessage(e));
     } catch (e) {
       showMessage('Invalid OTP or verification failed');
     } finally {
@@ -1045,13 +1078,20 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                   onPressed: codeSent ? verifyOtp : sendOtp,
                 ),
           const SizedBox(height: 20),
-          const Text(
-            'Use international format, for example +8801XXXXXXXXX. '
-            'For testing, add a test number in Firebase Authentication. '
-            'If SMS says the region is disabled, enable the country in '
-            'Authentication > Settings > SMS region policy.',
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 11, color: Colors.black54),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF3FBF8),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: const Color(0xFFB8E9DF)),
+            ),
+            child: const Text(
+              kIsWeb
+                  ? 'For reliable phone-login testing, use the Android emulator or a real phone. Web phone login also needs an authorized domain and reCAPTCHA.'
+                  : 'Use international format, for example +8801XXXXXXXXX. For emulator testing, add a Firebase test phone number and code. Also enable the country in Authentication > Settings > SMS region policy.',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 11, color: Colors.black54),
+            ),
           ),
         ],
       ),

@@ -10,6 +10,8 @@ import 'package:docmate/features/admin/screens/admin_symptom_rules_screen.dart';
 import 'package:docmate/features/auth/screens/intro_screen.dart';
 import 'package:docmate/features/shared/screens/overall_analytics_screen.dart';
 import 'package:docmate/features/shared/screens/edit_account_profile_screen.dart';
+import 'package:docmate/features/shared/screens/notifications_screen.dart';
+import 'package:docmate/features/shared/screens/settings_screen.dart';
 
 class AdminHome extends StatelessWidget {
   const AdminHome({super.key});
@@ -148,6 +150,30 @@ class AdminHome extends StatelessWidget {
             ],
           ),
         ),
+        buildHeaderIcon(
+          context: context,
+          tooltip: 'Notifications',
+          icon: Icons.notifications_none,
+          screen: const NotificationsScreen(),
+          badgeCount: AppData.instance.notifications
+              .where((notification) => !notification.read)
+              .length,
+        ),
+        const SizedBox(width: 4),
+        buildHeaderIcon(
+          context: context,
+          tooltip: 'Settings',
+          icon: Icons.settings_outlined,
+          screen: const SettingsScreen(),
+        ),
+        const SizedBox(width: 4),
+        buildHeaderIcon(
+          context: context,
+          tooltip: 'Edit admin profile',
+          icon: Icons.manage_accounts_outlined,
+          screen: const EditAccountProfileScreen(),
+        ),
+        const SizedBox(width: 4),
         IconButton(
           tooltip: 'Logout',
           onPressed: () {
@@ -162,37 +188,94 @@ class AdminHome extends StatelessWidget {
     );
   }
 
+  Widget buildHeaderIcon({
+    required BuildContext context,
+    required String tooltip,
+    required IconData icon,
+    required Widget screen,
+    int badgeCount = 0,
+  }) {
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        IconButton.filledTonal(
+          tooltip: tooltip,
+          onPressed: () {
+            openScreen(context, screen);
+          },
+          icon: Icon(icon),
+        ),
+        if (badgeCount > 0)
+          Positioned(
+            right: 2,
+            top: 2,
+            child: Container(
+              width: 18,
+              height: 18,
+              alignment: Alignment.center,
+              decoration: const BoxDecoration(
+                color: AppColors.danger,
+                shape: BoxShape.circle,
+              ),
+              child: Text(
+                badgeCount > 9 ? '9+' : badgeCount.toString(),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 9,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
   Widget buildDashboardStats({
     required int users,
     required int bookings,
     required int emergencyUsage,
   }) {
-    return Row(
-      children: [
-        Expanded(
-          child: buildStatCard(
-            title: "Today's Users",
-            value: users.toString(),
-            icon: Icons.people,
-          ),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: buildStatCard(
-            title: "Today's Bookings",
-            value: bookings.toString(),
-            icon: Icons.calendar_month,
-          ),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: buildStatCard(
-            title: "Today's Emergency",
-            value: emergencyUsage.toString(),
-            icon: Icons.emergency,
-          ),
-        ),
-      ],
+    final items = [
+      (title: "Today's Users", value: users.toString(), icon: Icons.people),
+      (
+        title: "Today's Bookings",
+        value: bookings.toString(),
+        icon: Icons.calendar_month,
+      ),
+      (
+        title: "Today's Emergency",
+        value: emergencyUsage.toString(),
+        icon: Icons.emergency,
+      ),
+    ];
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final columns = constraints.maxWidth >= 900
+            ? 3
+            : constraints.maxWidth >= 350
+                ? 2
+                : 1;
+        const spacing = 10.0;
+        final cardWidth =
+            (constraints.maxWidth - spacing * (columns - 1)) / columns;
+
+        return Wrap(
+          spacing: spacing,
+          runSpacing: spacing,
+          children: items.map((item) {
+            return SizedBox(
+              width: cardWidth,
+              child: buildStatCard(
+                title: item.title,
+                value: item.value,
+                icon: item.icon,
+              ),
+            );
+          }).toList(),
+        );
+      },
     );
   }
 
@@ -367,63 +450,78 @@ class AdminHome extends StatelessWidget {
         screen: OverallAnalyticsScreen(),
       ),
       AdminManagementItem(
+        title: 'Notifications',
+        icon: Icons.notifications_none,
+        screen: NotificationsScreen(),
+      ),
+      AdminManagementItem(
+        title: 'Settings',
+        icon: Icons.settings_outlined,
+        screen: SettingsScreen(),
+      ),
+      AdminManagementItem(
         title: 'Admin Profile',
         icon: Icons.manage_accounts_outlined,
         screen: EditAccountProfileScreen(),
       ),
     ];
 
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: managementItems.length,
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        crossAxisSpacing: 12,
-        mainAxisSpacing: 12,
-        childAspectRatio: 1.3,
-      ),
-      itemBuilder: (context, index) {
-        final item = managementItems[index];
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final columns = constraints.maxWidth >= 1050
+            ? 4
+            : constraints.maxWidth >= 700
+                ? 3
+                : 2;
 
-        return InkWell(
-          borderRadius: BorderRadius.circular(20),
-          onTap: () {
-            openScreen(
-              context,
-              item.screen,
+        return GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: managementItems.length,
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: columns,
+            crossAxisSpacing: 12,
+            mainAxisSpacing: 12,
+            mainAxisExtent: 145,
+          ),
+          itemBuilder: (context, index) {
+            final item = managementItems[index];
+
+            return InkWell(
+              borderRadius: BorderRadius.circular(20),
+              onTap: () {
+                openScreen(context, item.screen);
+              },
+              child: Container(
+                padding: const EdgeInsets.all(15),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: Colors.grey.shade300),
+                ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    CircleAvatar(
+                      backgroundColor: AppColors.lightMint,
+                      child: Icon(
+                        item.icon,
+                        color: AppColors.primaryDark,
+                      ),
+                    ),
+                    const SizedBox(height: 9),
+                    Text(
+                      item.title,
+                      textAlign: TextAlign.center,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
+              ),
             );
           },
-          child: Container(
-            padding: const EdgeInsets.all(15),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(
-                color: Colors.grey.shade300,
-              ),
-            ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                CircleAvatar(
-                  backgroundColor: AppColors.lightMint,
-                  child: Icon(
-                    item.icon,
-                    color: AppColors.primaryDark,
-                  ),
-                ),
-                const SizedBox(height: 9),
-                Text(
-                  item.title,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
-            ),
-          ),
         );
       },
     );

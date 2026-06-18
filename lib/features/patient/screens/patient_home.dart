@@ -11,6 +11,7 @@ import 'package:docmate/features/patient/screens/health_card_screen.dart';
 import 'package:docmate/features/patient/screens/health_profile_screen.dart';
 import 'package:docmate/features/patient/screens/medicine_screen.dart';
 import 'package:docmate/features/shared/screens/notifications_screen.dart';
+import 'package:docmate/features/shared/screens/settings_screen.dart';
 import 'package:docmate/features/patient/screens/patient_appointments_screen.dart';
 import 'package:docmate/features/patient/screens/patient_profile_screen.dart';
 import 'package:docmate/features/patient/screens/prescription_screen.dart';
@@ -86,6 +87,10 @@ class _PatientHomeState extends State<PatientHome> {
             openScreen(
               const PatientProfileScreen(),
             );
+          } else if (index == 4) {
+            openScreen(
+              const SettingsScreen(),
+            );
           }
         },
         items: const [
@@ -104,6 +109,10 @@ class _PatientHomeState extends State<PatientHome> {
           BottomNavigationBarItem(
             icon: Icon(Icons.person_outline),
             label: 'Profile',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.settings_outlined),
+            label: 'Settings',
           ),
         ],
       ),
@@ -194,6 +203,7 @@ class _PatientHomeState extends State<PatientHome> {
         Stack(
           children: [
             IconButton(
+              tooltip: 'Notifications',
               onPressed: () {
                 openScreen(
                   const NotificationsScreen(),
@@ -217,16 +227,23 @@ class _PatientHomeState extends State<PatientHome> {
                     shape: BoxShape.circle,
                   ),
                   child: Text(
-                    unreadCount.toString(),
+                    unreadCount > 9 ? '9+' : unreadCount.toString(),
                     style: const TextStyle(
                       color: Colors.white,
-                      fontSize: 10,
+                      fontSize: 9,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
                 ),
               ),
           ],
+        ),
+        IconButton(
+          tooltip: 'Settings',
+          onPressed: () {
+            openScreen(const SettingsScreen());
+          },
+          icon: const Icon(Icons.settings_outlined),
         ),
       ],
     );
@@ -332,56 +349,71 @@ class _PatientHomeState extends State<PatientHome> {
       ),
     ];
 
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: features.length,
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        crossAxisSpacing: 12,
-        mainAxisSpacing: 12,
-        childAspectRatio: 1.35,
-      ),
-      itemBuilder: (context, index) {
-        final feature = features[index];
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final columns = constraints.maxWidth >= 1050
+            ? 4
+            : constraints.maxWidth >= 700
+                ? 3
+                : 2;
 
-        return InkWell(
-          borderRadius: BorderRadius.circular(20),
-          onTap: () {
-            openScreen(feature.screen);
-          },
-          child: Container(
-            padding: const EdgeInsets.all(15),
-            decoration: BoxDecoration(
-              color: feature.danger ? const Color(0xFFFFECEB) : Colors.white,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(
-                color: feature.danger ? AppColors.danger : Colors.grey.shade300,
-              ),
-            ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                CircleAvatar(
-                  backgroundColor:
-                      feature.danger ? AppColors.danger : AppColors.lightMint,
-                  child: Icon(
-                    feature.icon,
-                    color:
-                        feature.danger ? Colors.white : AppColors.primaryDark,
-                  ),
-                ),
-                const SizedBox(height: 9),
-                Text(
-                  feature.title,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
-            ),
+        return GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: features.length,
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: columns,
+            crossAxisSpacing: 12,
+            mainAxisSpacing: 12,
+            mainAxisExtent: 135,
           ),
+          itemBuilder: (context, index) {
+            final feature = features[index];
+
+            return InkWell(
+              borderRadius: BorderRadius.circular(20),
+              onTap: () {
+                openScreen(feature.screen);
+              },
+              child: Container(
+                padding: const EdgeInsets.all(15),
+                decoration: BoxDecoration(
+                  color:
+                      feature.danger ? const Color(0xFFFFECEB) : Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: feature.danger
+                        ? AppColors.danger
+                        : Colors.grey.shade300,
+                  ),
+                ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    CircleAvatar(
+                      backgroundColor: feature.danger
+                          ? AppColors.danger
+                          : AppColors.lightMint,
+                      child: Icon(
+                        feature.icon,
+                        color: feature.danger
+                            ? Colors.white
+                            : AppColors.primaryDark,
+                      ),
+                    ),
+                    const SizedBox(height: 9),
+                    Text(
+                      feature.title,
+                      textAlign: TextAlign.center,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
         );
       },
     );
