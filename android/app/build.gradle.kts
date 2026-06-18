@@ -1,3 +1,4 @@
+import java.util.Properties
 plugins {
     id("com.android.application")
     // START: FlutterFire Configuration
@@ -8,7 +9,7 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
-val localPropertiesForMaps = java.util.Properties()
+val localPropertiesForMaps = Properties()
 val localPropertiesFileForMaps = rootProject.file("local.properties")
 if (localPropertiesFileForMaps.exists()) {
     localPropertiesFileForMaps.inputStream().use { localPropertiesForMaps.load(it) }
@@ -23,6 +24,8 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
+
+    @Suppress("DEPRECATION")
 
     kotlinOptions {
         jvmTarget = JavaVersion.VERSION_17.toString()
