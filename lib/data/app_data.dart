@@ -2582,24 +2582,27 @@ class AppData extends ChangeNotifier {
     });
   }
 
-  Future<void> sendEmergencyRequest() async {
+  Future<void> sendEmergencyRequest({
+    double? latitude,
+    double? longitude,
+  }) async {
     if (currentUserId.isEmpty) return;
-    double? latitude;
-    double? longitude;
 
-    try {
-      var permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
+    if (latitude == null || longitude == null) {
+      try {
+        var permission = await Geolocator.checkPermission();
+        if (permission == LocationPermission.denied) {
+          permission = await Geolocator.requestPermission();
+        }
+        if (permission != LocationPermission.denied &&
+            permission != LocationPermission.deniedForever) {
+          final position = await Geolocator.getCurrentPosition();
+          latitude = position.latitude;
+          longitude = position.longitude;
+        }
+      } catch (_) {
+        // Request is still saved without a location.
       }
-      if (permission != LocationPermission.denied &&
-          permission != LocationPermission.deniedForever) {
-        final position = await Geolocator.getCurrentPosition();
-        latitude = position.latitude;
-        longitude = position.longitude;
-      }
-    } catch (_) {
-      // Request is still saved without a location.
     }
 
     await _firestore.collection('emergency_requests').add({

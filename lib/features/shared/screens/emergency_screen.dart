@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'package:docmate/core/theme/app_theme.dart';
@@ -36,6 +37,14 @@ class _EmergencyScreenState extends State<EmergencyScreen> {
 
       if (permission == LocationPermission.denied ||
           permission == LocationPermission.deniedForever) {
+        showMessage(
+            'Location permission is needed to show your emergency map.');
+        return;
+      }
+
+      final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        showMessage('Turn on device location to load the emergency map.');
         return;
       }
 
@@ -65,6 +74,26 @@ class _EmergencyScreenState extends State<EmergencyScreen> {
     }
   }
 
+  Future<void> openMapDirections({HospitalModel? hospital}) async {
+    Uri uri;
+    if (hospital != null && hospital.latitude != 0 && hospital.longitude != 0) {
+      uri = Uri.parse(
+        'https://www.google.com/maps/dir/?api=1&destination=${hospital.latitude},${hospital.longitude}',
+      );
+    } else if (currentPosition != null) {
+      uri = Uri.parse(
+        'https://www.google.com/maps/search/hospital/@${currentPosition!.latitude},${currentPosition!.longitude},14z',
+      );
+    } else {
+      uri = Uri.parse('https://www.google.com/maps/search/nearby+hospitals');
+    }
+
+    final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!opened && mounted) {
+      showMessage('Could not open Google Maps.');
+    }
+  }
+
   Future<void> sendEmergencyRequest() async {
     if (isSendingRequest) return;
     setState(() {
@@ -72,7 +101,10 @@ class _EmergencyScreenState extends State<EmergencyScreen> {
     });
 
     try {
-      await AppData.instance.sendEmergencyRequest();
+      await AppData.instance.sendEmergencyRequest(
+        latitude: currentPosition?.latitude,
+        longitude: currentPosition?.longitude,
+      );
       if (!mounted) return;
       showMessage('Emergency request recorded successfully.');
     } catch (_) {
@@ -143,79 +175,9 @@ class _EmergencyScreenState extends State<EmergencyScreen> {
           return ListView(
             padding: const EdgeInsets.all(18),
             children: [
-              Container(
-                padding: const EdgeInsets.all(22),
-                decoration: BoxDecoration(
-                  color: AppColors.danger,
-                  borderRadius: BorderRadius.circular(24),
-                ),
-                child: Column(
-                  children: [
-                    const Icon(
-                      Icons.emergency,
-                      color: Colors.white,
-                      size: 56,
-                    ),
-                    const SizedBox(height: 10),
-                    const Text(
-                      'Emergency Mode',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 23,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 7),
-                    const Text(
-                      'Use this feature only when immediate help is required.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.white),
-                    ),
-                    const SizedBox(height: 18),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.white,
-                          foregroundColor: AppColors.danger,
-                        ),
-                        onPressed: () {
-                          callNumber('999');
-                        },
-                        icon: const Icon(Icons.call),
-                        label: const Text('One-Tap Emergency Call'),
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    SizedBox(
-                      width: double.infinity,
-                      child: OutlinedButton.icon(
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.white,
-                          side: const BorderSide(color: Colors.white),
-                        ),
-                        onPressed:
-                            isSendingRequest ? null : sendEmergencyRequest,
-                        icon: isSendingRequest
-                            ? const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.white,
-                                ),
-                              )
-                            : const Icon(Icons.send),
-                        label: Text(
-                          isSendingRequest
-                              ? 'Sending Request...'
-                              : 'Send Emergency Request',
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+              buildEmergencyCard(),
+              const SizedBox(height: 18),
+              buildMapCard(hospitals),
               const SizedBox(height: 24),
               const Text(
                 'Nearby Hospitals',
@@ -226,18 +188,7 @@ class _EmergencyScreenState extends State<EmergencyScreen> {
               ),
               const SizedBox(height: 12),
               if (hospitals.isEmpty)
-                Container(
-                  padding: const EdgeInsets.all(18),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(18),
-                    border: Border.all(color: Colors.grey.shade300),
-                  ),
-                  child: const Text(
-                    'No hospitals have been added by the administrator yet. Emergency calling remains available.',
-                    textAlign: TextAlign.center,
-                  ),
-                )
+                buildEmptyHospitalCard()
               else
                 ...hospitals.map(buildHospitalCard),
               const SizedBox(height: 18),
@@ -256,6 +207,163 @@ class _EmergencyScreenState extends State<EmergencyScreen> {
     );
   }
 
+  Widget buildEmergencyCard() {
+    return Container(
+      padding: const EdgeInsets.all(22),
+      decoration: BoxDecoration(
+        color: AppColors.danger,
+        borderRadius: BorderRadius.circular(24),
+      ),
+      child: Column(
+        children: [
+          const Icon(Icons.emergency, color: Colors.white, size: 56),
+          const SizedBox(height: 10),
+          const Text(
+            'Emergency Mode',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 23,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 7),
+          const Text(
+            'Use this feature only when immediate help is required.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.white),
+          ),
+          const SizedBox(height: 18),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.white,
+                foregroundColor: AppColors.danger,
+              ),
+              onPressed: () => callNumber('999'),
+              icon: const Icon(Icons.call),
+              label: const Text('One-Tap Emergency Call'),
+            ),
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.white,
+                side: const BorderSide(color: Colors.white),
+              ),
+              onPressed: isSendingRequest ? null : sendEmergencyRequest,
+              icon: isSendingRequest
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Icon(Icons.send),
+              label: Text(
+                isSendingRequest
+                    ? 'Sending Request...'
+                    : 'Send Emergency Request',
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget buildMapCard(List<HospitalModel> hospitals) {
+    final current = currentPosition;
+    if (current == null) {
+      return Container(
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: Theme.of(context).cardColor,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: Colors.grey.shade300),
+        ),
+        child: Column(
+          children: [
+            const Icon(Icons.location_searching, color: AppColors.primaryDark),
+            const SizedBox(height: 8),
+            Text(
+              isLoadingLocation
+                  ? 'Loading your location...'
+                  : 'Allow location permission to show the emergency map.',
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      );
+    }
+
+    final center = LatLng(current.latitude, current.longitude);
+    final markers = <Marker>{
+      Marker(
+        markerId: const MarkerId('current-location'),
+        position: center,
+        infoWindow: const InfoWindow(title: 'Your Location'),
+        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
+      ),
+      ...hospitals
+          .where(
+              (hospital) => hospital.latitude != 0 && hospital.longitude != 0)
+          .map(
+            (hospital) => Marker(
+              markerId: MarkerId(hospital.id),
+              position: LatLng(hospital.latitude, hospital.longitude),
+              infoWindow: InfoWindow(
+                title: hospital.name,
+                snippet: hospital.address,
+              ),
+            ),
+          ),
+    };
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(22),
+      child: SizedBox(
+        height: 240,
+        child: GoogleMap(
+          initialCameraPosition: CameraPosition(target: center, zoom: 14),
+          myLocationEnabled: true,
+          myLocationButtonEnabled: true,
+          zoomControlsEnabled: false,
+          markers: markers,
+        ),
+      ),
+    );
+  }
+
+  Widget buildEmptyHospitalCard() {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Theme.of(context).cardColor,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: Colors.grey.shade300),
+      ),
+      child: Column(
+        children: [
+          const Text(
+            'No hospitals have been added by the administrator yet.',
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 10),
+          OutlinedButton.icon(
+            onPressed: () => openMapDirections(),
+            icon: const Icon(Icons.map_outlined),
+            label: const Text('Search Hospitals in Google Maps'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget buildHospitalCard(HospitalModel hospital) {
     final distance = distanceTo(hospital);
 
@@ -263,7 +371,7 @@ class _EmergencyScreenState extends State<EmergencyScreen> {
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Theme.of(context).cardColor,
         borderRadius: BorderRadius.circular(18),
         border: Border.all(color: Colors.grey.shade300),
       ),
@@ -271,10 +379,7 @@ class _EmergencyScreenState extends State<EmergencyScreen> {
         children: [
           const CircleAvatar(
             backgroundColor: AppColors.lightMint,
-            child: Icon(
-              Icons.local_hospital,
-              color: AppColors.primaryDark,
-            ),
+            child: Icon(Icons.local_hospital, color: AppColors.primaryDark),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -301,10 +406,14 @@ class _EmergencyScreenState extends State<EmergencyScreen> {
               ],
             ),
           ),
+          IconButton(
+            tooltip: 'Directions',
+            onPressed: () => openMapDirections(hospital: hospital),
+            icon: const Icon(Icons.directions),
+          ),
           IconButton.filled(
-            onPressed: () {
-              callNumber(hospital.phone);
-            },
+            tooltip: 'Call',
+            onPressed: () => callNumber(hospital.phone),
             icon: const Icon(Icons.call),
           ),
         ],

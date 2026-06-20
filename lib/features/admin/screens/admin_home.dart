@@ -8,44 +8,28 @@ import 'package:docmate/features/admin/screens/admin_emergency_requests_screen.d
 import 'package:docmate/features/admin/screens/admin_management_screens.dart';
 import 'package:docmate/features/admin/screens/admin_symptom_rules_screen.dart';
 import 'package:docmate/features/auth/screens/intro_screen.dart';
-import 'package:docmate/features/shared/screens/overall_analytics_screen.dart';
-import 'package:docmate/features/shared/screens/edit_account_profile_screen.dart';
 import 'package:docmate/features/shared/screens/notifications_screen.dart';
+import 'package:docmate/features/shared/screens/overall_analytics_screen.dart';
 import 'package:docmate/features/shared/screens/settings_screen.dart';
 
 class AdminHome extends StatelessWidget {
   const AdminHome({super.key});
 
-  void openScreen(
-    BuildContext context,
-    Widget screen,
-  ) {
+  void openScreen(BuildContext context, Widget screen) {
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (context) {
-          return screen;
-        },
-      ),
+      MaterialPageRoute(builder: (context) => screen),
     );
   }
 
-  Future<void> logout(
-    BuildContext context,
-  ) async {
+  Future<void> logout(BuildContext context) async {
     await FirebaseAuth.instance.signOut();
 
-    if (!context.mounted) {
-      return;
-    }
+    if (!context.mounted) return;
 
     Navigator.pushAndRemoveUntil(
       context,
-      MaterialPageRoute(
-        builder: (context) {
-          return const IntroScreen();
-        },
-      ),
+      MaterialPageRoute(builder: (context) => const IntroScreen()),
       (route) => false,
     );
   }
@@ -59,29 +43,28 @@ class AdminHome extends StatelessWidget {
         child: AnimatedBuilder(
           animation: appData,
           builder: (context, child) {
-            final approvedDoctors = appData.doctors.where(
-              (doctor) {
-                return doctor.approved;
-              },
-            ).length;
+            final approvedDoctors = appData.doctors.where((doctor) {
+              return doctor.approved;
+            }).length;
 
-            final pendingDoctors = appData.doctors.where(
-              (doctor) {
-                return !doctor.approved;
-              },
-            ).length;
+            final pendingDoctors = appData.doctors.where((doctor) {
+              return !doctor.approved && doctor.available;
+            }).length;
 
             final now = DateTime.now();
-            bool isToday(DateTime date) =>
-                date.year == now.year &&
-                date.month == now.month &&
-                date.day == now.day;
-            final todayBookings = appData.appointments
-                .where((appointment) => isToday(appointment.date))
-                .length;
-            final todayEmergencyUsage = appData.emergencyRequests
-                .where((request) => isToday(request.createdAt))
-                .length;
+            bool isToday(DateTime date) {
+              return date.year == now.year &&
+                  date.month == now.month &&
+                  date.day == now.day;
+            }
+
+            final todayBookings = appData.appointments.where((appointment) {
+              return isToday(appointment.date);
+            }).length;
+            final todayEmergencyUsage =
+                appData.emergencyRequests.where((request) {
+              return isToday(request.createdAt);
+            }).length;
             final todayUsers = appData.todayUserCount;
 
             return ListView(
@@ -118,116 +101,206 @@ class AdminHome extends StatelessWidget {
   }
 
   Widget buildHeader(BuildContext context) {
-    return Row(
-      children: [
-        const CircleAvatar(
-          radius: 27,
-          backgroundColor: AppColors.primary,
-          child: Icon(
-            Icons.admin_panel_settings,
-            color: AppColors.dark,
-            size: 30,
-          ),
-        ),
-        const SizedBox(width: 12),
-        const Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+    final unreadCount = AppData.instance.notifications.where((notification) {
+      return !notification.read;
+    }).length;
+
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: AppColors.primary,
+        borderRadius: BorderRadius.circular(24),
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final compact = constraints.maxWidth < 520;
+          final title = Row(
             children: [
-              Text(
-                'DocMate Administration',
-                style: TextStyle(
-                  color: Colors.black54,
+              CircleAvatar(
+                radius: compact ? 30 : 36,
+                backgroundColor: Colors.white,
+                child: const Icon(
+                  Icons.admin_panel_settings,
+                  color: AppColors.primaryDark,
+                  size: 36,
                 ),
               ),
-              Text(
-                'Admin Dashboard',
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
+              const SizedBox(width: 14),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'DocMate Administration',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: Colors.black54,
+                        fontSize: 13,
+                      ),
+                    ),
+                    Text(
+                      'Admin Dashboard',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: AppColors.dark,
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
-          ),
-        ),
-        buildHeaderIcon(
-          context: context,
-          tooltip: 'Notifications',
-          icon: Icons.notifications_none,
-          screen: const NotificationsScreen(),
-          badgeCount: AppData.instance.notifications
-              .where((notification) => !notification.read)
-              .length,
-        ),
-        const SizedBox(width: 4),
-        buildHeaderIcon(
-          context: context,
-          tooltip: 'Settings',
-          icon: Icons.settings_outlined,
-          screen: const SettingsScreen(),
-        ),
-        const SizedBox(width: 4),
-        buildHeaderIcon(
-          context: context,
-          tooltip: 'Edit admin profile',
-          icon: Icons.manage_accounts_outlined,
-          screen: const EditAccountProfileScreen(),
-        ),
-        const SizedBox(width: 4),
-        IconButton(
-          tooltip: 'Logout',
-          onPressed: () {
-            showLogoutDialog(context);
-          },
-          icon: const Icon(
-            Icons.logout,
-            color: AppColors.danger,
-          ),
-        ),
-      ],
+          );
+
+          final actions = Row(
+            children: [
+              Expanded(
+                child: buildHeaderAction(
+                  context: context,
+                  tooltip: 'Notifications',
+                  label: 'Alerts',
+                  icon: Icons.notifications_none,
+                  screen: const NotificationsScreen(),
+                  badgeCount: unreadCount,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: buildHeaderAction(
+                  context: context,
+                  tooltip: 'Settings',
+                  label: 'Settings',
+                  icon: Icons.settings_outlined,
+                  screen: const SettingsScreen(),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: buildLogoutAction(context),
+              ),
+            ],
+          );
+
+          if (compact) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                title,
+                const SizedBox(height: 16),
+                actions,
+              ],
+            );
+          }
+
+          return Row(
+            children: [
+              Expanded(child: title),
+              const SizedBox(width: 18),
+              SizedBox(width: 310, child: actions),
+            ],
+          );
+        },
+      ),
     );
   }
 
-  Widget buildHeaderIcon({
+  Widget buildHeaderAction({
     required BuildContext context,
     required String tooltip,
+    required String label,
     required IconData icon,
     required Widget screen,
     int badgeCount = 0,
   }) {
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
-        IconButton.filledTonal(
-          tooltip: tooltip,
-          onPressed: () {
-            openScreen(context, screen);
-          },
-          icon: Icon(icon),
+    return InkWell(
+      borderRadius: BorderRadius.circular(16),
+      onTap: () => openScreen(context, screen),
+      child: buildActionContent(
+        tooltip: tooltip,
+        label: label,
+        icon: icon,
+        badgeCount: badgeCount,
+      ),
+    );
+  }
+
+  Widget buildLogoutAction(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(16),
+      onTap: () => showLogoutDialog(context),
+      child: buildActionContent(
+        tooltip: 'Logout',
+        label: 'Logout',
+        icon: Icons.logout,
+        iconColor: AppColors.danger,
+      ),
+    );
+  }
+
+  Widget buildActionContent({
+    required String tooltip,
+    required String label,
+    required IconData icon,
+    Color iconColor = AppColors.dark,
+    int badgeCount = 0,
+  }) {
+    return Tooltip(
+      message: tooltip,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
+        decoration: BoxDecoration(
+          color: const Color(0xEFFFFFFF),
+          borderRadius: BorderRadius.circular(16),
         ),
-        if (badgeCount > 0)
-          Positioned(
-            right: 2,
-            top: 2,
-            child: Container(
-              width: 18,
-              height: 18,
-              alignment: Alignment.center,
-              decoration: const BoxDecoration(
-                color: AppColors.danger,
-                shape: BoxShape.circle,
-              ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Icon(icon, color: iconColor, size: 26),
+                if (badgeCount > 0)
+                  Positioned(
+                    right: -8,
+                    top: -8,
+                    child: Container(
+                      width: 19,
+                      height: 19,
+                      alignment: Alignment.center,
+                      decoration: const BoxDecoration(
+                        color: AppColors.danger,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Text(
+                        badgeCount > 9 ? '9+' : badgeCount.toString(),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 9,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 5),
+            FittedBox(
               child: Text(
-                badgeCount > 9 ? '9+' : badgeCount.toString(),
+                label,
+                maxLines: 1,
                 style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 9,
-                  fontWeight: FontWeight.bold,
+                  color: AppColors.dark,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
             ),
-          ),
-      ],
+          ],
+        ),
+      ),
     );
   }
 
@@ -268,6 +341,7 @@ class AdminHome extends StatelessWidget {
             return SizedBox(
               width: cardWidth,
               child: buildStatCard(
+                context: context,
                 title: item.title,
                 value: item.value,
                 icon: item.icon,
@@ -280,43 +354,33 @@ class AdminHome extends StatelessWidget {
   }
 
   Widget buildStatCard({
+    required BuildContext context,
     required String title,
     required String value,
     required IconData icon,
   }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: 7,
-        vertical: 16,
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Theme.of(context).cardColor,
         borderRadius: BorderRadius.circular(18),
         border: Border.all(
-          color: Colors.grey.shade300,
+          color: isDark ? const Color(0xFF31413F) : Colors.grey.shade300,
         ),
       ),
       child: Column(
         children: [
-          Icon(
-            icon,
-            color: AppColors.primaryDark,
-          ),
+          Icon(icon, color: AppColors.primaryDark),
           const SizedBox(height: 7),
           Text(
             value,
-            style: const TextStyle(
-              fontSize: 23,
-              fontWeight: FontWeight.bold,
-            ),
+            style: const TextStyle(fontSize: 23, fontWeight: FontWeight.bold),
           ),
           Text(
             title,
             textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: Colors.black54,
-              fontSize: 11,
-            ),
+            style: const TextStyle(color: Colors.black54, fontSize: 11),
           ),
         ],
       ),
@@ -338,17 +402,16 @@ class AdminHome extends StatelessWidget {
         children: [
           const Row(
             children: [
-              Icon(
-                Icons.medical_services,
-                color: AppColors.primary,
-              ),
+              Icon(Icons.medical_services, color: AppColors.primary),
               SizedBox(width: 8),
-              Text(
-                'Doctor Approval Summary',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 17,
-                  fontWeight: FontWeight.bold,
+              Expanded(
+                child: Text(
+                  'Doctor Approval Summary',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 17,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
             ],
@@ -399,20 +462,13 @@ class AdminHome extends StatelessWidget {
               fontWeight: FontWeight.bold,
             ),
           ),
-          Text(
-            title,
-            style: const TextStyle(
-              color: Colors.white70,
-            ),
-          ),
+          Text(title, style: const TextStyle(color: Colors.white70)),
         ],
       ),
     );
   }
 
-  Widget buildManagementGrid(
-    BuildContext context,
-  ) {
+  Widget buildManagementGrid(BuildContext context) {
     const managementItems = [
       AdminManagementItem(
         title: 'Manage Doctors',
@@ -449,21 +505,6 @@ class AdminHome extends StatelessWidget {
         icon: Icons.query_stats,
         screen: OverallAnalyticsScreen(),
       ),
-      AdminManagementItem(
-        title: 'Notifications',
-        icon: Icons.notifications_none,
-        screen: NotificationsScreen(),
-      ),
-      AdminManagementItem(
-        title: 'Settings',
-        icon: Icons.settings_outlined,
-        screen: SettingsScreen(),
-      ),
-      AdminManagementItem(
-        title: 'Admin Profile',
-        icon: Icons.manage_accounts_outlined,
-        screen: EditAccountProfileScreen(),
-      ),
     ];
 
     return LayoutBuilder(
@@ -486,28 +527,27 @@ class AdminHome extends StatelessWidget {
           ),
           itemBuilder: (context, index) {
             final item = managementItems[index];
+            final isDark = Theme.of(context).brightness == Brightness.dark;
 
             return InkWell(
               borderRadius: BorderRadius.circular(20),
-              onTap: () {
-                openScreen(context, item.screen);
-              },
+              onTap: () => openScreen(context, item.screen),
               child: Container(
                 padding: const EdgeInsets.all(15),
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: Theme.of(context).cardColor,
                   borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: Colors.grey.shade300),
+                  border: Border.all(
+                    color:
+                        isDark ? const Color(0xFF31413F) : Colors.grey.shade300,
+                  ),
                 ),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     CircleAvatar(
                       backgroundColor: AppColors.lightMint,
-                      child: Icon(
-                        item.icon,
-                        color: AppColors.primaryDark,
-                      ),
+                      child: Icon(item.icon, color: AppColors.primaryDark),
                     ),
                     const SizedBox(height: 9),
                     Text(
@@ -527,37 +567,22 @@ class AdminHome extends StatelessWidget {
     );
   }
 
-  Future<void> showLogoutDialog(
-    BuildContext context,
-  ) async {
+  Future<void> showLogoutDialog(BuildContext context) async {
     final shouldLogout = await showDialog<bool>(
       context: context,
       builder: (dialogContext) {
         return AlertDialog(
           title: const Text('Logout'),
-          content: const Text(
-            'Are you sure you want to logout?',
-          ),
+          content: const Text('Are you sure you want to logout?'),
           actions: [
             TextButton(
-              onPressed: () {
-                Navigator.pop(
-                  dialogContext,
-                  false,
-                );
-              },
+              onPressed: () => Navigator.pop(dialogContext, false),
               child: const Text('Cancel'),
             ),
             ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.danger,
-              ),
-              onPressed: () {
-                Navigator.pop(
-                  dialogContext,
-                  true,
-                );
-              },
+              style:
+                  ElevatedButton.styleFrom(backgroundColor: AppColors.danger),
+              onPressed: () => Navigator.pop(dialogContext, true),
               child: const Text('Logout'),
             ),
           ],
@@ -565,14 +590,8 @@ class AdminHome extends StatelessWidget {
       },
     );
 
-    if (shouldLogout != true) {
-      return;
-    }
-
-    if (!context.mounted) {
-      return;
-    }
-
+    if (shouldLogout != true) return;
+    if (!context.mounted) return;
     await logout(context);
   }
 }

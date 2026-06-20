@@ -221,11 +221,16 @@ service cloud.firestore {
       allow read, update: if signedIn() && (
         resource.data.userId == request.auth.uid || isAdmin()
       );
-      allow create: if signedIn() && (
-        request.resource.data.userId == request.auth.uid ||
-        isDoctor() ||
-        isAdmin()
-      );
+
+      // Patients create a notification for themselves and for the doctor
+      // during appointment-booking transactions. Allow signed-in clients to
+      // create simple notification records, while reads remain owner/admin only.
+      allow create: if signedIn() &&
+        request.resource.data.userId is string &&
+        request.resource.data.title is string &&
+        request.resource.data.message is string &&
+        request.resource.data.read == false;
+
       allow delete: if isAdmin();
     }
 

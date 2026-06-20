@@ -16,7 +16,7 @@ String friendlyAuthMessage(FirebaseAuthException error) {
     case 'weak-password':
       return AuthValidators.passwordHelp;
     case 'email-already-in-use':
-      return 'An account already exists for this email.';
+      return 'This email already exists in Firebase Authentication. Try login, use Google login if used before, or delete the test user from Firebase Authentication before signing up again.';
     case 'user-not-found':
     case 'wrong-password':
     case 'invalid-credential':
@@ -32,7 +32,7 @@ String friendlyAuthMessage(FirebaseAuthException error) {
     case 'captcha-check-failed':
       return 'The security check failed. Refresh and try again.';
     case 'operation-not-allowed':
-      return 'This sign-in method is not enabled in Firebase.';
+      return 'This sign-in method is disabled for the Firebase project connected to this app. Check Firebase Authentication sign-in providers, SHA fingerprints, and google-services.json.';
     case 'session-expired':
       return 'The OTP has expired. Request a new code.';
     case 'invalid-verification-code':
@@ -812,7 +812,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
   String phoneAuthMessage(FirebaseAuthException error) {
     switch (error.code) {
       case 'operation-not-allowed':
-        return 'Phone sign-in is disabled. In Firebase Console, open Authentication > Sign-in method > Phone and enable it.';
+        return 'Phone sign-in is disabled for the Firebase app used by this APK. Enable Phone provider, allow the SMS country, add SHA-1/SHA-256, then download the latest google-services.json.';
       case 'app-not-authorized':
         return 'This Android build is not authorized for Firebase phone login. Add the debug SHA-1 and SHA-256 fingerprints in Firebase Project settings, then replace google-services.json.';
       case 'invalid-app-credential':

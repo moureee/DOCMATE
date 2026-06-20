@@ -13,7 +13,6 @@ import 'package:docmate/features/patient/screens/medicine_screen.dart';
 import 'package:docmate/features/shared/screens/notifications_screen.dart';
 import 'package:docmate/features/shared/screens/settings_screen.dart';
 import 'package:docmate/features/patient/screens/patient_appointments_screen.dart';
-import 'package:docmate/features/patient/screens/patient_profile_screen.dart';
 import 'package:docmate/features/patient/screens/prescription_screen.dart';
 import 'package:docmate/features/patient/screens/queue_prediction_screen.dart';
 import 'package:docmate/features/patient/screens/timeline_screen.dart';
@@ -85,10 +84,6 @@ class _PatientHomeState extends State<PatientHome> {
             );
           } else if (index == 3) {
             openScreen(
-              const PatientProfileScreen(),
-            );
-          } else if (index == 4) {
-            openScreen(
               const SettingsScreen(),
             );
           }
@@ -105,10 +100,6 @@ class _PatientHomeState extends State<PatientHome> {
           BottomNavigationBarItem(
             icon: Icon(Icons.chat_bubble_outline),
             label: 'Chat',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.person_outline),
-            label: 'Profile',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.settings_outlined),

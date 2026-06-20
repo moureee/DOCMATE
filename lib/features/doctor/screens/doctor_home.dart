@@ -9,7 +9,6 @@ import 'package:docmate/features/doctor/screens/doctor_patient_info_screen.dart'
 import 'package:docmate/features/doctor/screens/prescription_management_screen.dart';
 import 'package:docmate/features/shared/screens/chat_screen.dart';
 import 'package:docmate/features/shared/screens/overall_analytics_screen.dart';
-import 'package:docmate/features/shared/screens/edit_account_profile_screen.dart';
 import 'package:docmate/features/shared/screens/notifications_screen.dart';
 import 'package:docmate/features/shared/screens/settings_screen.dart';
 
@@ -215,8 +214,8 @@ class DoctorHome extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 4),
-                    const Text(
-                      '⭐  •  years',
+                    Text(
+                      '⭐ ${doctor.rating} • ${doctor.experience} years',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -248,16 +247,6 @@ class DoctorHome extends StatelessWidget {
                   screen: const SettingsScreen(),
                 ),
               ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: buildHeaderAction(
-                  context: context,
-                  tooltip: 'Edit doctor profile',
-                  label: 'Profile',
-                  icon: Icons.manage_accounts_outlined,
-                  screen: const EditAccountProfileScreen(),
-                ),
-              ),
             ],
           );
 
@@ -277,7 +266,7 @@ class DoctorHome extends StatelessWidget {
               Expanded(child: doctorInfo),
               const SizedBox(width: 18),
               SizedBox(
-                width: 330,
+                width: 220,
                 child: actions,
               ),
             ],
@@ -503,12 +492,6 @@ class DoctorHome extends StatelessWidget {
         title: 'Overall Analytics',
         icon: Icons.query_stats,
         screen: const OverallAnalyticsScreen(),
-      ),
-      buildServiceCard(
-        context: context,
-        title: 'Edit Profile',
-        icon: Icons.manage_accounts_outlined,
-        screen: const EditAccountProfileScreen(),
       ),
       buildAverageTimeCard(doctor),
     ];

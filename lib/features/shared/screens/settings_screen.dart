@@ -9,7 +9,6 @@ import 'package:docmate/features/patient/screens/health_profile_screen.dart';
 import 'package:docmate/features/patient/screens/patient_profile_screen.dart';
 import 'package:docmate/features/shared/screens/edit_account_profile_screen.dart';
 import 'package:docmate/features/shared/screens/notifications_screen.dart';
-import 'package:docmate/features/shared/screens/overall_analytics_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -59,56 +58,19 @@ class SettingsScreen extends StatelessWidget {
         animation: appData,
         builder: (context, child) {
           final role = appData.currentUserRole;
+          final roleLabel = role.isEmpty
+              ? 'DocMate account'
+              : '${role[0].toUpperCase()}${role.substring(1)} account';
           final unreadCount =
               appData.notifications.where((item) => !item.read).length;
 
           return ListView(
             padding: const EdgeInsets.all(18),
             children: [
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: AppColors.primary,
-                  borderRadius: BorderRadius.circular(24),
-                ),
-                child: Row(
-                  children: [
-                    const CircleAvatar(
-                      radius: 32,
-                      backgroundColor: Colors.white,
-                      child: Icon(
-                        Icons.settings,
-                        color: AppColors.primaryDark,
-                        size: 34,
-                      ),
-                    ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            appData.currentDisplayName,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            role.isEmpty
-                                ? 'DocMate account'
-                                : '${role[0].toUpperCase()}${role.substring(1)} settings',
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+              buildHeader(context, appData, roleLabel),
               const SizedBox(height: 18),
+              buildThemeTile(context),
+              const SizedBox(height: 10),
               buildTile(
                 context: context,
                 icon: Icons.notifications_none,
@@ -145,25 +107,20 @@ class SettingsScreen extends StatelessWidget {
                   context: context,
                   icon: Icons.manage_accounts_outlined,
                   title: role == 'admin' ? 'Admin Profile' : 'Doctor Profile',
-                  subtitle: 'Edit name, phone and professional details',
+                  subtitle: 'Edit account and professional information',
                   screen: const EditAccountProfileScreen(),
-                ),
-                buildTile(
-                  context: context,
-                  icon: Icons.query_stats,
-                  title: 'Overall Analytics',
-                  subtitle: 'View total, weekly and monthly activity',
-                  screen: const OverallAnalyticsScreen(),
                 ),
               ],
               const SizedBox(height: 10),
-              buildInformationCard(),
+              buildInformationCard(context),
               const SizedBox(height: 16),
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
                   style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.danger),
+                    backgroundColor: AppColors.danger,
+                    foregroundColor: Colors.white,
+                  ),
                   onPressed: () => logout(context),
                   icon: const Icon(Icons.logout),
                   label: const Text('Logout'),
@@ -176,6 +133,82 @@ class SettingsScreen extends StatelessWidget {
     );
   }
 
+  Widget buildHeader(BuildContext context, AppData appData, String roleLabel) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppColors.primary,
+        borderRadius: BorderRadius.circular(24),
+      ),
+      child: Row(
+        children: [
+          const CircleAvatar(
+            radius: 32,
+            backgroundColor: Colors.white,
+            child: Icon(
+              Icons.settings,
+              color: AppColors.primaryDark,
+              size: 34,
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  appData.currentDisplayName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: AppColors.dark,
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  roleLabel,
+                  style: const TextStyle(color: Colors.black54),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget buildThemeTile(BuildContext context) {
+    return ValueListenableBuilder<ThemeMode>(
+      valueListenable: AppThemeController.themeMode,
+      builder: (context, mode, child) {
+        final darkMode = mode == ThemeMode.dark;
+        return buildPlainContainer(
+          context,
+          ListTile(
+            leading: const CircleAvatar(
+              backgroundColor: AppColors.lightMint,
+              child:
+                  Icon(Icons.dark_mode_outlined, color: AppColors.primaryDark),
+            ),
+            title: const Text(
+              'Dark Mode',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            subtitle: Text(darkMode
+                ? 'Dark appearance enabled'
+                : 'Light appearance enabled'),
+            trailing: Switch(
+              value: darkMode,
+              onChanged: AppThemeController.setDarkMode,
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   Widget buildTile({
     required BuildContext context,
     required IconData icon,
@@ -183,14 +216,9 @@ class SettingsScreen extends StatelessWidget {
     required String subtitle,
     required Widget screen,
   }) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 11),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Colors.grey.shade300),
-      ),
-      child: ListTile(
+    return buildPlainContainer(
+      context,
+      ListTile(
         leading: CircleAvatar(
           backgroundColor: AppColors.lightMint,
           child: Icon(icon, color: AppColors.primaryDark),
@@ -211,13 +239,31 @@ class SettingsScreen extends StatelessWidget {
     );
   }
 
-  Widget buildInformationCard() {
+  Widget buildPlainContainer(BuildContext context, Widget child) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 11),
+      decoration: BoxDecoration(
+        color: Theme.of(context).cardColor,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: isDark ? const Color(0xFF31413F) : Colors.grey.shade300,
+        ),
+      ),
+      child: child,
+    );
+  }
+
+  Widget buildInformationCard(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Theme.of(context).cardColor,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Colors.grey.shade300),
+        border: Border.all(
+          color: isDark ? const Color(0xFF31413F) : Colors.grey.shade300,
+        ),
       ),
       child: const Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -234,7 +280,7 @@ class SettingsScreen extends StatelessWidget {
           ),
           SizedBox(height: 8),
           Text(
-            'DocMate keeps role-based access for patient, doctor and admin features. Do not share test account passwords or Firebase credentials.',
+            'DocMate uses Firebase Authentication, Firestore security rules, and role-based access for patient, doctor and admin features.',
             style: TextStyle(color: Colors.black54),
           ),
         ],
