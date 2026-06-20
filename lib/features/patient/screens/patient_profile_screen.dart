@@ -3,32 +3,12 @@ import 'package:flutter/material.dart';
 
 import 'package:docmate/core/theme/app_theme.dart';
 import 'package:docmate/data/app_data.dart';
-import 'package:docmate/features/patient/screens/book_appointment_screen.dart';
 import 'package:docmate/features/patient/screens/health_card_screen.dart';
 import 'package:docmate/features/patient/screens/health_profile_screen.dart';
-import 'package:docmate/features/auth/screens/intro_screen.dart';
 import 'package:docmate/features/patient/screens/prescription_screen.dart';
 
 class PatientProfileScreen extends StatelessWidget {
   const PatientProfileScreen({super.key});
-
-  Future<void> logout(BuildContext context) async {
-    await FirebaseAuth.instance.signOut();
-
-    if (!context.mounted) {
-      return;
-    }
-
-    Navigator.pushAndRemoveUntil(
-      context,
-      MaterialPageRoute(
-        builder: (context) {
-          return const IntroScreen();
-        },
-      ),
-      (route) => false,
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -93,22 +73,6 @@ class PatientProfileScreen extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 18),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const BookAppointmentScreen(),
-                  ),
-                );
-              },
-              icon: const Icon(Icons.calendar_month),
-              label: const Text('Book Appointment'),
-            ),
-          ),
-          const SizedBox(height: 12),
           buildMenuTile(
             context: context,
             icon: Icons.health_and_safety,
@@ -129,20 +93,6 @@ class PatientProfileScreen extends StatelessWidget {
             title: 'My Prescriptions',
             subtitle: 'View medicines and doctor notes',
             screen: const PrescriptionScreen(),
-          ),
-          const SizedBox(height: 18),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.danger,
-              ),
-              onPressed: () {
-                showLogoutDialog(context);
-              },
-              icon: const Icon(Icons.logout),
-              label: const Text('Logout'),
-            ),
           ),
         ],
       ),
@@ -231,42 +181,5 @@ class PatientProfileScreen extends StatelessWidget {
         },
       ),
     );
-  }
-
-  Future<void> showLogoutDialog(
-    BuildContext context,
-  ) async {
-    final shouldLogout = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          title: const Text('Logout'),
-          content: const Text(
-            'Are you sure you want to logout?',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.pop(dialogContext, false);
-              },
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.danger,
-              ),
-              onPressed: () {
-                Navigator.pop(dialogContext, true);
-              },
-              child: const Text('Logout'),
-            ),
-          ],
-        );
-      },
-    );
-
-    if (shouldLogout == true && context.mounted) {
-      await logout(context);
-    }
   }
 }

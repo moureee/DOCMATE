@@ -34,6 +34,40 @@ class DoctorHome extends StatelessWidget {
     final appData = AppData.instance;
 
     return Scaffold(
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: 0,
+        type: BottomNavigationBarType.fixed,
+        selectedItemColor: AppColors.primaryDark,
+        unselectedItemColor: Colors.black54,
+        onTap: (index) {
+          final doctor = AppData.instance.currentDoctor;
+          if (index == 1) {
+            openScreen(context, const DoctorAppointmentsScreen());
+          } else if (index == 2 && doctor != null) {
+            openScreen(context, DoctorPatientInfoScreen(doctor: doctor));
+          } else if (index == 3) {
+            openScreen(context, const ChatScreen());
+          }
+        },
+        items: const [
+          BottomNavigationBarItem(
+            icon: Icon(Icons.home),
+            label: 'Home',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.calendar_month),
+            label: 'Appointments',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.people_outline),
+            label: 'Patients',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.chat_bubble_outline),
+            label: 'Chat',
+          ),
+        ],
+      ),
       body: SafeArea(
         child: AnimatedBuilder(
           animation: appData,
@@ -453,12 +487,6 @@ class DoctorHome extends StatelessWidget {
     final services = <Widget>[
       buildServiceCard(
         context: context,
-        title: 'Appointments',
-        icon: Icons.calendar_month,
-        screen: const DoctorAppointmentsScreen(),
-      ),
-      buildServiceCard(
-        context: context,
         title: 'Weekly Availability',
         icon: Icons.schedule,
         screen: DoctorAvailabilityScreen(doctor: doctor),
@@ -468,18 +496,6 @@ class DoctorHome extends StatelessWidget {
         title: 'Prescriptions',
         icon: Icons.receipt_long,
         screen: PrescriptionManagementScreen(doctorName: doctor.name),
-      ),
-      buildServiceCard(
-        context: context,
-        title: 'Patient Information',
-        icon: Icons.folder_shared_outlined,
-        screen: DoctorPatientInfoScreen(doctor: doctor),
-      ),
-      buildServiceCard(
-        context: context,
-        title: 'Patient Chat',
-        icon: Icons.chat_bubble_outline,
-        screen: const ChatScreen(),
       ),
       buildServiceCard(
         context: context,

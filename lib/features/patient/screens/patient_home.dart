@@ -7,13 +7,11 @@ import 'package:docmate/features/shared/screens/chat_screen.dart';
 import 'package:docmate/features/doctor/screens/doctor_profile_screen.dart';
 import 'package:docmate/features/shared/screens/emergency_screen.dart';
 import 'package:docmate/features/patient/screens/book_appointment_screen.dart';
-import 'package:docmate/features/patient/screens/health_card_screen.dart';
-import 'package:docmate/features/patient/screens/health_profile_screen.dart';
 import 'package:docmate/features/patient/screens/medicine_screen.dart';
 import 'package:docmate/features/shared/screens/notifications_screen.dart';
 import 'package:docmate/features/shared/screens/settings_screen.dart';
 import 'package:docmate/features/patient/screens/patient_appointments_screen.dart';
-import 'package:docmate/features/patient/screens/prescription_screen.dart';
+import 'package:docmate/features/patient/screens/patient_profile_screen.dart';
 import 'package:docmate/features/patient/screens/queue_prediction_screen.dart';
 import 'package:docmate/features/patient/screens/timeline_screen.dart';
 
@@ -84,7 +82,7 @@ class _PatientHomeState extends State<PatientHome> {
             );
           } else if (index == 3) {
             openScreen(
-              const SettingsScreen(),
+              const PatientProfileScreen(),
             );
           }
         },
@@ -102,8 +100,8 @@ class _PatientHomeState extends State<PatientHome> {
             label: 'Chat',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.settings_outlined),
-            label: 'Settings',
+            icon: Icon(Icons.person_outline),
+            label: 'Profile',
           ),
         ],
       ),
@@ -298,7 +296,7 @@ class _PatientHomeState extends State<PatientHome> {
   Widget buildFeatureGrid() {
     final features = [
       const HomeFeature(
-        title: 'Symptom Checker',
+        title: 'AI Health Guidance',
         icon: Icons.psychology,
         screen: AiSymptomCheckerScreen(),
       ),
@@ -317,21 +315,6 @@ class _PatientHomeState extends State<PatientHome> {
         title: 'Medicines',
         icon: Icons.medication,
         screen: MedicineScreen(),
-      ),
-      const HomeFeature(
-        title: 'Health Profile',
-        icon: Icons.monitor_heart_outlined,
-        screen: HealthProfileScreen(),
-      ),
-      const HomeFeature(
-        title: 'Health Card',
-        icon: Icons.badge_outlined,
-        screen: HealthCardScreen(),
-      ),
-      const HomeFeature(
-        title: 'Prescriptions',
-        icon: Icons.receipt_long,
-        screen: PrescriptionScreen(),
       ),
       const HomeFeature(
         title: 'Timeline',

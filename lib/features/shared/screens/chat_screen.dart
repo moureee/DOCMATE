@@ -13,6 +13,7 @@ class ChatScreen extends StatefulWidget {
 class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController messageController = TextEditingController();
   bool isSending = false;
+  bool choosingPartner = true;
 
   @override
   void dispose() {
@@ -24,9 +25,7 @@ class _ChatScreenState extends State<ChatScreen> {
     final message = messageController.text.trim();
     if (message.isEmpty || isSending) return;
 
-    setState(() {
-      isSending = true;
-    });
+    setState(() => isSending = true);
 
     try {
       await AppData.instance.sendChatMessage(message);
@@ -35,11 +34,7 @@ class _ChatScreenState extends State<ChatScreen> {
       if (!mounted) return;
       showMessage('Message could not be sent. Please try again.');
     } finally {
-      if (mounted) {
-        setState(() {
-          isSending = false;
-        });
-      }
+      if (mounted) setState(() => isSending = false);
     }
   }
 
@@ -60,6 +55,11 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
+  void selectPartner(ChatPartnerModel partner) {
+    AppData.instance.selectChatPartner(partner);
+    setState(() => choosingPartner = false);
+  }
+
   @override
   Widget build(BuildContext context) {
     final appData = AppData.instance;
@@ -69,193 +69,259 @@ class _ChatScreenState extends State<ChatScreen> {
       builder: (context, child) {
         final partners = appData.chatPartners;
         final hasPartner = appData.activeChatPartnerId.isNotEmpty;
+        final partnerLabel = appData.currentUserRole == 'doctor'
+            ? 'Select a patient'
+            : 'Select a doctor';
 
         return Scaffold(
           appBar: AppBar(
-            title: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  hasPartner
-                      ? appData.activeChatPartnerName
-                      : 'Patient–Doctor Chat',
-                  style: const TextStyle(fontSize: 17),
-                ),
-                if (appData.activeChatPartnerSubtitle.isNotEmpty)
-                  Text(
-                    appData.activeChatPartnerSubtitle,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.normal,
-                    ),
-                  ),
-              ],
+            title: Text(
+              choosingPartner || !hasPartner
+                  ? 'Chat'
+                  : appData.activeChatPartnerName,
             ),
             actions: [
+              if (!choosingPartner && hasPartner)
+                IconButton(
+                  tooltip: 'Change chat contact',
+                  onPressed: () => setState(() => choosingPartner = true),
+                  icon: const Icon(Icons.people_outline),
+                ),
               IconButton(
-                onPressed: hasPartner ? requestCall : null,
+                onPressed: !choosingPartner && hasPartner ? requestCall : null,
                 tooltip: 'Request a call',
                 icon: const Icon(Icons.call_outlined),
               ),
             ],
           ),
-          body: hasPartner
-              ? Column(
-                  children: [
-                    if (partners.length > 1)
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.fromLTRB(14, 10, 14, 8),
-                        color: AppColors.lightMint,
-                        child: DropdownButtonFormField<String>(
-                          initialValue: appData.activeChatPartnerId,
-                          decoration: InputDecoration(
-                            labelText: appData.currentUserRole == 'doctor'
-                                ? 'Select patient'
-                                : 'Select doctor',
-                            prefixIcon: const Icon(Icons.people_outline),
-                          ),
-                          items: partners.map((partner) {
-                            return DropdownMenuItem<String>(
-                              value: partner.id,
-                              child: Text(partner.name),
-                            );
-                          }).toList(),
-                          onChanged: (value) {
-                            if (value == null) return;
-                            final partner = partners.firstWhere(
-                              (item) => item.id == value,
-                            );
-                            appData.selectChatPartner(partner);
-                          },
-                        ),
-                      ),
-                    Expanded(
-                      child: appData.chatMessages.isEmpty
-                          ? const Center(
-                              child: Text(
-                                'No messages yet. Start the conversation.',
-                              ),
-                            )
-                          : ListView.builder(
-                              padding: const EdgeInsets.all(16),
-                              itemCount: appData.chatMessages.length,
-                              itemBuilder: (context, index) {
-                                final message = appData.chatMessages[index];
-                                final sentByCurrentUser =
-                                    message.senderId == appData.currentUserId;
+          body: partners.isEmpty
+              ? buildNoPartnerState(appData)
+              : choosingPartner || !hasPartner
+                  ? buildPartnerPicker(partnerLabel, partners)
+                  : buildConversation(appData),
+        );
+      },
+    );
+  }
 
-                                return Align(
-                                  alignment: sentByCurrentUser
-                                      ? Alignment.centerRight
-                                      : Alignment.centerLeft,
-                                  child: Container(
-                                    constraints: const BoxConstraints(
-                                      maxWidth: 290,
-                                    ),
-                                    margin: const EdgeInsets.only(bottom: 10),
-                                    padding: const EdgeInsets.all(13),
-                                    decoration: BoxDecoration(
-                                      color: sentByCurrentUser
-                                          ? AppColors.primary
-                                          : Colors.white,
-                                      borderRadius: BorderRadius.only(
-                                        topLeft: const Radius.circular(17),
-                                        topRight: const Radius.circular(17),
-                                        bottomLeft: Radius.circular(
-                                          sentByCurrentUser ? 17 : 3,
-                                        ),
-                                        bottomRight: Radius.circular(
-                                          sentByCurrentUser ? 3 : 17,
-                                        ),
-                                      ),
-                                      border: sentByCurrentUser
-                                          ? null
-                                          : Border.all(
-                                              color: Colors.grey.shade300,
-                                            ),
-                                    ),
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.end,
-                                      children: [
-                                        Text(message.message),
-                                        const SizedBox(height: 5),
-                                        Text(
-                                          formatTime(message.time),
-                                          style: const TextStyle(
-                                            color: Colors.black54,
-                                            fontSize: 10,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                );
-                              },
-                            ),
-                    ),
-                    SafeArea(
-                      top: false,
+  Widget buildNoPartnerState(AppData appData) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.chat_bubble_outline,
+              size: 54,
+              color: AppColors.primaryDark,
+            ),
+            const SizedBox(height: 14),
+            Text(
+              appData.currentUserRole == 'doctor'
+                  ? 'No patient chats yet.'
+                  : 'No doctor chats yet.',
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              appData.currentUserRole == 'doctor'
+                  ? 'Patient chats appear after appointments are booked with you.'
+                  : 'Book an appointment first, then select the doctor you want to chat with.',
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.black54),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget buildPartnerPicker(
+    String partnerLabel,
+    List<ChatPartnerModel> partners,
+  ) {
+    return ListView(
+      padding: const EdgeInsets.all(18),
+      children: [
+        Text(
+          partnerLabel,
+          style: const TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 6),
+        const Text(
+          'Choose who you want to talk to. DocMate will open that conversation only.',
+          style: TextStyle(color: Colors.black54),
+        ),
+        const SizedBox(height: 16),
+        ...partners.map((partner) {
+          final selected = partner.id == AppData.instance.activeChatPartnerId;
+          return Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            decoration: BoxDecoration(
+              color: Theme.of(context).cardColor,
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(
+                color: selected ? AppColors.primaryDark : Colors.grey.shade300,
+              ),
+            ),
+            child: ListTile(
+              leading: CircleAvatar(
+                backgroundColor: AppColors.lightMint,
+                child: Icon(
+                  AppData.instance.currentUserRole == 'doctor'
+                      ? Icons.person_outline
+                      : Icons.medical_services_outlined,
+                  color: AppColors.primaryDark,
+                ),
+              ),
+              title: Text(
+                partner.name,
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+              subtitle: Text(partner.subtitle),
+              trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+              onTap: () => selectPartner(partner),
+            ),
+          );
+        }),
+      ],
+    );
+  }
+
+  Widget buildConversation(AppData appData) {
+    return Column(
+      children: [
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+          color: AppColors.lightMint,
+          child: Row(
+            children: [
+              const Icon(Icons.chat_bubble_outline,
+                  color: AppColors.primaryDark),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  appData.activeChatPartnerSubtitle.isEmpty
+                      ? appData.activeChatPartnerName
+                      : '${appData.activeChatPartnerName} • ${appData.activeChatPartnerSubtitle}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+              ),
+              TextButton.icon(
+                onPressed: () => setState(() => choosingPartner = true),
+                icon: const Icon(Icons.swap_horiz),
+                label: const Text('Change'),
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: appData.chatMessages.isEmpty
+              ? const Center(
+                  child: Text('No messages yet. Start the conversation.'),
+                )
+              : ListView.builder(
+                  padding: const EdgeInsets.all(16),
+                  itemCount: appData.chatMessages.length,
+                  itemBuilder: (context, index) {
+                    final message = appData.chatMessages[index];
+                    final sentByCurrentUser =
+                        message.senderId == appData.currentUserId;
+
+                    return Align(
+                      alignment: sentByCurrentUser
+                          ? Alignment.centerRight
+                          : Alignment.centerLeft,
                       child: Container(
-                        padding: const EdgeInsets.all(12),
+                        constraints: const BoxConstraints(maxWidth: 290),
+                        margin: const EdgeInsets.only(bottom: 10),
+                        padding: const EdgeInsets.all(13),
                         decoration: BoxDecoration(
-                          color: Colors.white,
-                          border: Border(
-                            top: BorderSide(color: Colors.grey.shade300),
+                          color: sentByCurrentUser
+                              ? AppColors.primary
+                              : Theme.of(context).cardColor,
+                          borderRadius: BorderRadius.only(
+                            topLeft: const Radius.circular(17),
+                            topRight: const Radius.circular(17),
+                            bottomLeft:
+                                Radius.circular(sentByCurrentUser ? 17 : 3),
+                            bottomRight:
+                                Radius.circular(sentByCurrentUser ? 3 : 17),
                           ),
+                          border: sentByCurrentUser
+                              ? null
+                              : Border.all(color: Colors.grey.shade300),
                         ),
-                        child: Row(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
                           children: [
-                            Expanded(
-                              child: TextField(
-                                controller: messageController,
-                                decoration: const InputDecoration(
-                                  hintText: 'Write a message...',
-                                  prefixIcon: Icon(Icons.chat_bubble_outline),
-                                ),
-                                textInputAction: TextInputAction.send,
-                                onSubmitted: (_) {
-                                  sendMessage();
-                                },
+                            Text(message.message),
+                            const SizedBox(height: 5),
+                            Text(
+                              formatTime(message.time),
+                              style: const TextStyle(
+                                color: Colors.black54,
+                                fontSize: 10,
                               ),
-                            ),
-                            const SizedBox(width: 8),
-                            IconButton.filled(
-                              style: IconButton.styleFrom(
-                                backgroundColor: AppColors.primary,
-                                foregroundColor: AppColors.dark,
-                              ),
-                              onPressed: isSending ? null : sendMessage,
-                              icon: isSending
-                                  ? const SizedBox(
-                                      width: 18,
-                                      height: 18,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                      ),
-                                    )
-                                  : const Icon(Icons.send),
                             ),
                           ],
                         ),
                       ),
+                    );
+                  },
+                ),
+        ),
+        SafeArea(
+          top: false,
+          child: Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Theme.of(context).cardColor,
+              border: Border(top: BorderSide(color: Colors.grey.shade300)),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: messageController,
+                    decoration: const InputDecoration(
+                      hintText: 'Write a message...',
+                      prefixIcon: Icon(Icons.chat_bubble_outline),
                     ),
-                  ],
-                )
-              : Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Text(
-                      appData.currentUserRole == 'doctor'
-                          ? 'Accept a patient appointment first. Chat will then appear here for the doctor and patient.'
-                          : 'Book an appointment first. Chat becomes available between you and the connected doctor.',
-                      textAlign: TextAlign.center,
-                    ),
+                    textInputAction: TextInputAction.send,
+                    onSubmitted: (_) => sendMessage(),
                   ),
                 ),
-        );
-      },
+                const SizedBox(width: 8),
+                IconButton.filled(
+                  style: IconButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: AppColors.dark,
+                  ),
+                  onPressed: isSending ? null : sendMessage,
+                  icon: isSending
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.send),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 

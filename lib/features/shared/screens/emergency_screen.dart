@@ -350,14 +350,21 @@ class _EmergencyScreenState extends State<EmergencyScreen> {
       child: Column(
         children: [
           const Text(
-            'No hospitals have been added by the administrator yet.',
+            'No saved hospital contacts are available inside DocMate yet.',
             textAlign: TextAlign.center,
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Use Google Maps search to find nearby hospitals now. An administrator can later add verified hospital contacts for faster one-tap access.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.black54),
           ),
           const SizedBox(height: 10),
           OutlinedButton.icon(
             onPressed: () => openMapDirections(),
             icon: const Icon(Icons.map_outlined),
-            label: const Text('Search Hospitals in Google Maps'),
+            label: const Text('Find Nearby Hospitals'),
           ),
         ],
       ),

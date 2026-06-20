@@ -1,8 +1,7 @@
+import 'package:firebase_ai/firebase_ai.dart';
 import 'package:flutter/material.dart';
 
 import 'package:docmate/core/theme/app_theme.dart';
-import 'package:docmate/data/app_data.dart';
-import 'package:docmate/features/doctor/screens/doctor_profile_screen.dart';
 
 class AiSymptomCheckerScreen extends StatefulWidget {
   const AiSymptomCheckerScreen({super.key});
@@ -12,198 +11,181 @@ class AiSymptomCheckerScreen extends StatefulWidget {
 }
 
 class _AiSymptomCheckerScreenState extends State<AiSymptomCheckerScreen> {
-  final Set<String> selectedSymptoms = <String>{};
-  final TextEditingController symptomSearchController = TextEditingController();
-
-  String symptomQuery = '';
-
-  String? suggestedDepartment;
-  String? urgency;
-  String? healthSuggestion;
-  DoctorModel? recommendedDoctor;
+  final TextEditingController symptomController = TextEditingController();
+  bool isLoading = false;
+  String? aiResult;
+  String? errorMessage;
 
   @override
   void dispose() {
-    symptomSearchController.dispose();
+    symptomController.dispose();
     super.dispose();
   }
 
-  void searchSymptoms() {
-    setState(() {
-      symptomQuery = symptomSearchController.text.trim().toLowerCase();
-    });
-  }
+  Future<void> generateGuidance() async {
+    final symptoms = symptomController.text.trim();
 
-  void checkSymptoms(AppData appData) {
-    if (selectedSymptoms.isEmpty) {
+    if (symptoms.length < 6) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Please select at least one symptom.'),
+          content:
+              Text('Please describe the symptoms in a little more detail.'),
         ),
       );
       return;
     }
 
-    final selected = selectedSymptoms.toList();
-    final department = appData.suggestDepartment(selected);
+    setState(() {
+      isLoading = true;
+      aiResult = null;
+      errorMessage = null;
+    });
 
-    DoctorModel? doctor;
-    for (final item in appData.rankedDoctors) {
-      if (item.specialty.toLowerCase() == department.toLowerCase()) {
-        doctor = item;
-        break;
+    try {
+      final model = FirebaseAI.googleAI().generativeModel(
+        model: 'gemini-3.5-flash',
+      );
+
+      final prompt = '''
+You are DocMate AI Health Guidance for a university healthcare appointment app.
+
+A patient wrote these symptoms:
+"""
+$symptoms
+"""
+
+Respond in simple language using exactly these sections:
+1. Possible Department:
+2. Urgency Level: Routine / Moderate / Emergency
+3. Suggested Next Step:
+4. Questions to Ask the Patient:
+5. Safety Note:
+
+Rules:
+- Do not claim to diagnose disease.
+- Do not prescribe medicine or dosage.
+- For severe symptoms such as chest pain, breathing difficulty, fainting, severe bleeding, stroke-like signs, or suicidal/self-harm risk, mark Emergency and advise immediate local emergency support or nearest hospital.
+- Keep the answer under 180 words.
+- Make the Safety Note say this is AI guidance only and not a medical diagnosis.
+''';
+
+      final response = await model.generateContent([
+        Content.text(prompt),
+      ]);
+
+      final text = response.text?.trim();
+
+      setState(() {
+        aiResult = text == null || text.isEmpty
+            ? 'No AI response was returned. Please try again.'
+            : text;
+      });
+    } catch (error) {
+      setState(() {
+        errorMessage = 'AI Health Guidance could not connect right now. '
+            'Check Firebase AI Logic setup, internet connection, and model access. '
+            'Details: $error';
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          isLoading = false;
+        });
       }
     }
-    doctor ??=
-        appData.rankedDoctors.isNotEmpty ? appData.rankedDoctors.first : null;
-
-    setState(() {
-      suggestedDepartment = department;
-      urgency = appData.symptomUrgency(selected);
-      healthSuggestion = appData.healthSuggestion(selected);
-      recommendedDoctor = doctor;
-    });
   }
 
-  void clearSymptoms() {
+  void clearAll() {
     setState(() {
-      selectedSymptoms.clear();
-      symptomSearchController.clear();
-      symptomQuery = '';
-      suggestedDepartment = null;
-      urgency = null;
-      healthSuggestion = null;
-      recommendedDoctor = null;
+      symptomController.clear();
+      aiResult = null;
+      errorMessage = null;
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    final appData = AppData.instance;
-
     return Scaffold(
       appBar: AppBar(
-        title: const Text('AI Symptom Checker'),
+        title: const Text('AI Health Guidance'),
         actions: [
           IconButton(
-            onPressed: clearSymptoms,
-            icon: const Icon(Icons.refresh),
             tooltip: 'Clear',
+            onPressed: clearAll,
+            icon: const Icon(Icons.refresh),
           ),
         ],
       ),
-      body: AnimatedBuilder(
-        animation: appData,
-        builder: (context, child) {
-          final allSymptoms = appData.availableSymptoms;
-          final symptoms = symptomQuery.isEmpty
-              ? allSymptoms
-              : allSymptoms.where((symptom) {
-                  return symptom.toLowerCase().contains(symptomQuery);
-                }).toList();
-          selectedSymptoms.removeWhere(
-            (symptom) => !allSymptoms.contains(symptom),
-          );
-
-          return SingleChildScrollView(
-            padding: const EdgeInsets.all(18),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                buildIntroductionCard(appData),
-                const SizedBox(height: 22),
-                const Text(
-                  'Select Your Symptoms',
-                  style: TextStyle(
-                    fontSize: 19,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: symptomSearchController,
-                        textInputAction: TextInputAction.search,
-                        onSubmitted: (_) => searchSymptoms(),
-                        decoration: InputDecoration(
-                          hintText: 'Search symptoms, e.g. fever',
-                          prefixIcon: const Icon(Icons.search),
-                          suffixIcon: symptomSearchController.text.isEmpty
-                              ? null
-                              : IconButton(
-                                  onPressed: () {
-                                    symptomSearchController.clear();
-                                    searchSymptoms();
-                                  },
-                                  icon: const Icon(Icons.close),
-                                ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    ElevatedButton.icon(
-                      onPressed: searchSymptoms,
-                      icon: const Icon(Icons.search),
-                      label: const Text('Search'),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 14),
-                if (symptoms.isEmpty)
-                  Text(symptomQuery.isEmpty
-                      ? 'No symptom rules are currently available.'
-                      : 'No symptoms match your search.')
-                else
-                  Wrap(
-                    spacing: 9,
-                    runSpacing: 9,
-                    children: symptoms.map((symptom) {
-                      final selected = selectedSymptoms.contains(symptom);
-
-                      return FilterChip(
-                        label: Text(symptom),
-                        selected: selected,
-                        selectedColor: AppColors.primary,
-                        checkmarkColor: AppColors.dark,
-                        onSelected: (value) {
-                          setState(() {
-                            if (value) {
-                              selectedSymptoms.add(symptom);
-                            } else {
-                              selectedSymptoms.remove(symptom);
-                            }
-                          });
-                        },
-                      );
-                    }).toList(),
-                  ),
-                const SizedBox(height: 24),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed:
-                        symptoms.isEmpty ? null : () => checkSymptoms(appData),
-                    icon: const Icon(Icons.psychology),
-                    label: const Text('Check Symptoms'),
-                  ),
-                ),
-                if (suggestedDepartment != null) ...[
-                  const SizedBox(height: 24),
-                  buildResultCard(appData),
-                ],
-              ],
+      body: ListView(
+        padding: const EdgeInsets.all(18),
+        children: [
+          buildIntroCard(),
+          const SizedBox(height: 18),
+          const Text(
+            'Describe Symptoms',
+            style: TextStyle(
+              fontSize: 19,
+              fontWeight: FontWeight.bold,
             ),
-          );
-        },
+          ),
+          const SizedBox(height: 10),
+          TextField(
+            controller: symptomController,
+            minLines: 5,
+            maxLines: 8,
+            textInputAction: TextInputAction.newline,
+            decoration: const InputDecoration(
+              hintText:
+                  'Example: fever, cough, headache for 2 days, feeling weak...',
+              alignLabelWithHint: true,
+              prefixIcon: Padding(
+                padding: EdgeInsets.only(bottom: 90),
+                child: Icon(Icons.health_and_safety_outlined),
+              ),
+            ),
+          ),
+          const SizedBox(height: 14),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: isLoading ? null : generateGuidance,
+              icon: isLoading
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.auto_awesome),
+              label: Text(
+                isLoading ? 'Getting AI Guidance...' : 'Get AI Guidance',
+              ),
+            ),
+          ),
+          if (errorMessage != null) ...[
+            const SizedBox(height: 18),
+            buildMessageCard(
+              icon: Icons.error_outline,
+              title: 'Connection Issue',
+              message: errorMessage!,
+              danger: true,
+            ),
+          ],
+          if (aiResult != null) ...[
+            const SizedBox(height: 18),
+            buildMessageCard(
+              icon: Icons.smart_toy_outlined,
+              title: 'Gemini AI Guidance',
+              message: aiResult!,
+            ),
+          ],
+          const SizedBox(height: 18),
+          buildSafetyCard(),
+        ],
       ),
     );
   }
 
-  Widget buildIntroductionCard(AppData appData) {
-    final usingFirestoreRules = appData.symptomRules.isNotEmpty;
-
+  Widget buildIntroCard() {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
@@ -211,169 +193,103 @@ class _AiSymptomCheckerScreenState extends State<AiSymptomCheckerScreen> {
         color: AppColors.primary,
         borderRadius: BorderRadius.circular(22),
       ),
-      child: Column(
+      child: const Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(
-            Icons.smart_toy_outlined,
-            size: 42,
-          ),
-          const SizedBox(height: 10),
-          const Text(
-            'Smart Department Suggestion',
+          Icon(Icons.auto_awesome, size: 42),
+          SizedBox(height: 10),
+          Text(
+            'Real AI Health Guidance',
             style: TextStyle(
-              fontSize: 19,
+              fontSize: 20,
               fontWeight: FontWeight.bold,
             ),
           ),
-          const SizedBox(height: 7),
-          const Text(
-            'Select symptoms to receive a rule-based department, urgency, '
-            'and doctor suggestion.',
-          ),
-          const SizedBox(height: 8),
+          SizedBox(height: 8),
           Text(
-            usingFirestoreRules
-                ? 'Rules are loaded from the DocMate database.'
-                : 'Default rules are being used until an administrator adds database rules.',
-            style: const TextStyle(fontSize: 12),
-          ),
-          const SizedBox(height: 4),
-          const Text(
-            'Educational decision support only. This is not a medical diagnosis.',
-            style: TextStyle(fontSize: 12),
+            'Powered by Firebase AI Logic and Gemini. It suggests a suitable '
+            'department, urgency level, and next step from typed symptoms.',
           ),
         ],
       ),
     );
   }
 
-  Widget buildResultCard(AppData appData) {
-    final doctor = recommendedDoctor;
-
+  Widget buildMessageCard({
+    required IconData icon,
+    required String title,
+    required String message,
+    bool danger = false,
+  }) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Theme.of(context).cardColor,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: AppColors.primary,
-          width: 1.5,
+          color: danger ? AppColors.danger : AppColors.primary,
+          width: 1.3,
         ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Row(
+          Row(
             children: [
               Icon(
-                Icons.auto_awesome,
-                color: AppColors.primaryDark,
+                icon,
+                color: danger ? AppColors.danger : AppColors.primaryDark,
               ),
-              SizedBox(width: 8),
-              Text(
-                'Smart Result',
-                style: TextStyle(
-                  fontSize: 19,
-                  fontWeight: FontWeight.bold,
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 18),
-          buildResultSection(
-            title: 'Suggested Department',
-            value: suggestedDepartment ?? '',
+          const SizedBox(height: 12),
+          SelectableText(
+            message,
+            style: const TextStyle(height: 1.35),
           ),
-          const SizedBox(height: 14),
-          buildResultSection(
-            title: 'Urgency',
-            value: urgency ?? 'Routine',
-          ),
-          const SizedBox(height: 14),
-          buildResultSection(
-            title: 'Health Suggestion',
-            value: healthSuggestion ?? '',
-          ),
-          if (doctor != null) ...[
-            const Divider(height: 30),
-            const Text(
-              'Recommended Doctor',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 10),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const CircleAvatar(
-                backgroundColor: AppColors.lightMint,
-                child: Icon(
-                  Icons.medical_services,
-                  color: AppColors.primaryDark,
-                ),
-              ),
-              title: Text(
-                doctor.name,
-                style: const TextStyle(fontWeight: FontWeight.bold),
-              ),
-              subtitle: Text(
-                '${doctor.specialty}\n'
-                'Rating: ${doctor.rating.toStringAsFixed(1)} • '
-                'Queue: ${appData.predictedQueueMinutes(doctor)} minutes',
-              ),
-              isThreeLine: true,
-              trailing: const Icon(
-                Icons.arrow_forward_ios,
-                size: 17,
-              ),
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) {
-                      return DoctorProfileScreen(
-                        doctorId: doctor.id,
-                        doctorName: doctor.name,
-                        specialty: doctor.specialty,
-                        rating: doctor.rating.toString(),
-                        available: doctor.availableSlots
-                            .map(availabilitySlotLabel)
-                            .join(', '),
-                      );
-                    },
-                  ),
-                );
-              },
-            ),
-          ] else ...[
-            const Divider(height: 30),
-            const Text(
-              'No approved doctor currently matches this suggestion.',
-              style: TextStyle(color: Colors.black54),
-            ),
-          ],
         ],
       ),
     );
   }
 
-  Widget buildResultSection({
-    required String title,
-    required String value,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          title,
-          style: const TextStyle(color: Colors.black54),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          value,
-          style: const TextStyle(fontWeight: FontWeight.bold),
-        ),
-      ],
+  Widget buildSafetyCard() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF7E6),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFFFC857)),
+      ),
+      child: const Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.info_outline, color: Color(0xFF8A5A00)),
+          SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'AI Health Guidance is educational support only. It is not a '
+              'medical diagnosis. For urgent or severe symptoms, contact local '
+              'emergency support or visit the nearest hospital immediately.',
+              style: TextStyle(
+                color: Color(0xFF5C3A00),
+                height: 1.35,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

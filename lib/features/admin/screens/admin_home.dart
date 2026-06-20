@@ -6,7 +6,6 @@ import 'package:docmate/data/app_data.dart';
 import 'package:docmate/features/admin/screens/admin_doctors_screen.dart';
 import 'package:docmate/features/admin/screens/admin_emergency_requests_screen.dart';
 import 'package:docmate/features/admin/screens/admin_management_screens.dart';
-import 'package:docmate/features/admin/screens/admin_symptom_rules_screen.dart';
 import 'package:docmate/features/auth/screens/intro_screen.dart';
 import 'package:docmate/features/shared/screens/notifications_screen.dart';
 import 'package:docmate/features/shared/screens/overall_analytics_screen.dart';
@@ -39,6 +38,39 @@ class AdminHome extends StatelessWidget {
     final appData = AppData.instance;
 
     return Scaffold(
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: 0,
+        type: BottomNavigationBarType.fixed,
+        selectedItemColor: AppColors.primaryDark,
+        unselectedItemColor: Colors.black54,
+        onTap: (index) {
+          if (index == 1) {
+            openScreen(context, const AdminDoctorsScreen());
+          } else if (index == 2) {
+            openScreen(context, const AdminPatientsScreen());
+          } else if (index == 3) {
+            openScreen(context, const AdminAppointmentsScreen());
+          }
+        },
+        items: const [
+          BottomNavigationBarItem(
+            icon: Icon(Icons.dashboard_outlined),
+            label: 'Home',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.medical_services_outlined),
+            label: 'Doctors',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.people_outline),
+            label: 'Patients',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.calendar_month),
+            label: 'Bookings',
+          ),
+        ],
+      ),
       body: SafeArea(
         child: AnimatedBuilder(
           animation: appData,
@@ -177,10 +209,6 @@ class AdminHome extends StatelessWidget {
                   screen: const SettingsScreen(),
                 ),
               ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: buildLogoutAction(context),
-              ),
             ],
           );
 
@@ -199,7 +227,7 @@ class AdminHome extends StatelessWidget {
             children: [
               Expanded(child: title),
               const SizedBox(width: 18),
-              SizedBox(width: 310, child: actions),
+              SizedBox(width: 220, child: actions),
             ],
           );
         },
@@ -471,21 +499,6 @@ class AdminHome extends StatelessWidget {
   Widget buildManagementGrid(BuildContext context) {
     const managementItems = [
       AdminManagementItem(
-        title: 'Manage Doctors',
-        icon: Icons.medical_services,
-        screen: AdminDoctorsScreen(),
-      ),
-      AdminManagementItem(
-        title: 'Manage Patients',
-        icon: Icons.people,
-        screen: AdminPatientsScreen(),
-      ),
-      AdminManagementItem(
-        title: 'Appointments',
-        icon: Icons.calendar_month,
-        screen: AdminAppointmentsScreen(),
-      ),
-      AdminManagementItem(
         title: 'Announcements',
         icon: Icons.campaign,
         screen: AdminAnnouncementsScreen(),
@@ -494,11 +507,6 @@ class AdminHome extends StatelessWidget {
         title: 'Emergency Requests',
         icon: Icons.emergency,
         screen: AdminEmergencyRequestsScreen(),
-      ),
-      AdminManagementItem(
-        title: 'Symptom Rules',
-        icon: Icons.psychology,
-        screen: AdminSymptomRulesScreen(),
       ),
       AdminManagementItem(
         title: 'Overall Analytics',

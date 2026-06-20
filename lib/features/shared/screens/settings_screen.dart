@@ -4,9 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:docmate/core/theme/app_theme.dart';
 import 'package:docmate/data/app_data.dart';
 import 'package:docmate/features/auth/screens/intro_screen.dart';
-import 'package:docmate/features/patient/screens/health_card_screen.dart';
-import 'package:docmate/features/patient/screens/health_profile_screen.dart';
-import 'package:docmate/features/patient/screens/patient_profile_screen.dart';
 import 'package:docmate/features/shared/screens/edit_account_profile_screen.dart';
 import 'package:docmate/features/shared/screens/notifications_screen.dart';
 
@@ -26,8 +23,10 @@ class SettingsScreen extends StatelessWidget {
               child: const Text('Cancel'),
             ),
             ElevatedButton(
-              style:
-                  ElevatedButton.styleFrom(backgroundColor: AppColors.danger),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.danger,
+                foregroundColor: Colors.white,
+              ),
               onPressed: () => Navigator.pop(dialogContext, true),
               child: const Text('Logout'),
             ),
@@ -73,6 +72,19 @@ class SettingsScreen extends StatelessWidget {
               const SizedBox(height: 10),
               buildTile(
                 context: context,
+                icon: Icons.manage_accounts_outlined,
+                title: role == 'doctor'
+                    ? 'Doctor Profile'
+                    : role == 'admin'
+                        ? 'Admin Profile'
+                        : 'Account Profile',
+                subtitle: role == 'doctor'
+                    ? 'Edit professional and contact information'
+                    : 'Edit name and contact information',
+                screen: const EditAccountProfileScreen(),
+              ),
+              buildTile(
+                context: context,
                 icon: Icons.notifications_none,
                 title: 'Notifications',
                 subtitle: unreadCount == 0
@@ -80,37 +92,6 @@ class SettingsScreen extends StatelessWidget {
                     : '$unreadCount unread notification${unreadCount == 1 ? '' : 's'}',
                 screen: const NotificationsScreen(),
               ),
-              if (role == 'patient') ...[
-                buildTile(
-                  context: context,
-                  icon: Icons.person_outline,
-                  title: 'Patient Profile',
-                  subtitle: 'View profile, prescriptions and quick actions',
-                  screen: const PatientProfileScreen(),
-                ),
-                buildTile(
-                  context: context,
-                  icon: Icons.monitor_heart_outlined,
-                  title: 'Health Profile',
-                  subtitle: 'Height, weight, allergies and blood group',
-                  screen: const HealthProfileScreen(),
-                ),
-                buildTile(
-                  context: context,
-                  icon: Icons.badge_outlined,
-                  title: 'Quick Health Card',
-                  subtitle: 'Emergency-ready health summary',
-                  screen: const HealthCardScreen(),
-                ),
-              ] else ...[
-                buildTile(
-                  context: context,
-                  icon: Icons.manage_accounts_outlined,
-                  title: role == 'admin' ? 'Admin Profile' : 'Doctor Profile',
-                  subtitle: 'Edit account and professional information',
-                  screen: const EditAccountProfileScreen(),
-                ),
-              ],
               const SizedBox(height: 10),
               buildInformationCard(context),
               const SizedBox(height: 16),
@@ -189,16 +170,18 @@ class SettingsScreen extends StatelessWidget {
           ListTile(
             leading: const CircleAvatar(
               backgroundColor: AppColors.lightMint,
-              child:
-                  Icon(Icons.dark_mode_outlined, color: AppColors.primaryDark),
+              child: Icon(
+                Icons.dark_mode_outlined,
+                color: AppColors.primaryDark,
+              ),
             ),
             title: const Text(
               'Dark Mode',
               style: TextStyle(fontWeight: FontWeight.bold),
             ),
-            subtitle: Text(darkMode
-                ? 'Dark appearance enabled'
-                : 'Light appearance enabled'),
+            subtitle: Text(
+              darkMode ? 'Dark appearance enabled' : 'Light appearance enabled',
+            ),
             trailing: Switch(
               value: darkMode,
               onChanged: AppThemeController.setDarkMode,

@@ -28,6 +28,13 @@ class _EditAccountProfileScreenState extends State<EditAccountProfileScreen> {
 
   bool get isDoctor => AppData.instance.currentUserRole == 'doctor';
 
+  String get screenTitle {
+    final role = AppData.instance.currentUserRole;
+    if (role == 'doctor') return 'Edit Doctor Profile';
+    if (role == 'admin') return 'Edit Admin Profile';
+    return 'Edit Account Profile';
+  }
+
   @override
   void initState() {
     super.initState();
@@ -107,7 +114,7 @@ class _EditAccountProfileScreenState extends State<EditAccountProfileScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(isDoctor ? 'Edit Doctor Profile' : 'Admin Profile'),
+        title: Text(screenTitle),
       ),
       body: loading
           ? const Center(child: CircularProgressIndicator())
@@ -136,7 +143,7 @@ class _EditAccountProfileScreenState extends State<EditAccountProfileScreen> {
                       child: Text(
                         isDoctor
                             ? 'Update your professional information. Approval status, rating and account role are protected.'
-                            : 'Update the administrator contact information. Account role and UID are protected.',
+                            : 'Update your account contact information. Account role and UID are protected.',
                         textAlign: TextAlign.center,
                         style: const TextStyle(fontSize: 12),
                       ),
